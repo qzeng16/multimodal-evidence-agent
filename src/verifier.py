@@ -28,7 +28,7 @@ def verify_claim(
     Verify a claim using visual evidence and optional OCR evidence.
 
     The verifier does not inspect the original image directly.
-    It reasons only over evidence produced by the selected tools.
+    It reasons only over evidence produced by selected tools.
     """
 
     load_dotenv()
@@ -53,16 +53,12 @@ def verify_claim(
         else "No additional context was provided."
     )
 
-    visual_evidence_json = (
-        inspection.model_dump_json(
-            indent=2
-        )
+    routing_json = routing_decision.model_dump_json(
+        indent=2
     )
 
-    routing_json = (
-        routing_decision.model_dump_json(
-            indent=2
-        )
+    visual_evidence_json = inspection.model_dump_json(
+        indent=2
     )
 
     if ocr_extraction is not None:
@@ -88,13 +84,13 @@ You receive:
 4. Structured evidence from an Image Inspector.
 5. Optional structured evidence from an OCR Tool.
 
-Your task is to classify the claim as:
+Classify the claim as:
 
 - supported
 - refuted
 - insufficient
 
-Label definitions:
+Definitions:
 
 SUPPORTED:
 The available evidence directly and clearly establishes
@@ -112,26 +108,29 @@ Rules:
 
 1. Use only the supplied evidence.
 2. Do not use outside knowledge.
-3. Do not assume facts that are not present in the evidence.
+3. Do not assume facts absent from the evidence.
 4. Absence of evidence is not automatically contradiction.
 5. For exact-text claims, prefer OCR evidence over informal
    text readings from the Image Inspector.
-6. If OCR and visual evidence conflict, prefer the more
-   specific and higher-confidence OCR evidence, but lower
-   confidence when the conflict remains unresolved.
-7. A target not being found is not by itself enough for
-   refutation. Refutation requires visible evidence of a
-   different value or other direct contradiction.
-8. A visible object's design or apparent age cannot establish
-   an installation date.
-9. Use insufficient when a date, identity, cause, ownership,
-   history, or other non-visible fact cannot be established.
-10. Confidence must reflect evidence quality and ambiguity.
-11. Put visual evidence only in
+6. Ignore ordinary sentence punctuation differences when
+   comparing visible text.
+7. If OCR detects the requested text after normalization,
+   that supports the exact-text claim.
+8. If OCR clearly detects a different value at the specified
+   target location, that can directly refute the claim.
+9. A target not being found is not by itself sufficient for
+   refutation when the relevant region is unreadable.
+10. A visible object's design or apparent condition cannot
+    establish an installation date.
+11. Use insufficient for non-visible historical facts,
+    causes, ownership, dates, or identities that cannot be
+    established from the supplied evidence.
+12. Confidence must reflect evidence quality and ambiguity.
+13. Put visual evidence only in
     relevant_visual_observations.
-12. Put OCR-derived evidence only in
+14. Put OCR-derived evidence only in
     relevant_ocr_observations.
-13. Keep the rationale concise and factual.
+15. Keep the rationale concise and factual.
 """.strip()
 
     user_prompt = f"""
@@ -175,9 +174,7 @@ Return the final structured verification decision.
             "The model returned no parsed verification decision."
         )
 
-    evidence_items: List[
-        EvidenceItem
-    ] = []
+    evidence_items: List[EvidenceItem] = []
 
     for observation in (
         decision.relevant_visual_observations
@@ -203,94 +200,82 @@ Return the final structured verification decision.
             )
         )
 
-    tool_trace: List[
-        ToolCallRecord
-    ] = []
+    tool_trace: List[ToolCallRecord] = []
 
-    router_record = ToolCallRecord(
-        tool_name="tool_router",
-        tool_input={
-            "claim": example.claim,
-        },
-        tool_output_summary=(
-            f"use_image_inspector="
-            f"{routing_decision.use_image_inspector}; "
-            f"use_ocr={routing_decision.use_ocr}; "
-            f"reasoning={routing_decision.reasoning}"
-        ),
+    tool_trace.append(
+        ToolCallRecord(
+            tool_name="tool_router",
+            tool_input={
+                "claim": example.claim,
+            },
+            tool_output_summary=(
+                "use_image_inspector="
+                f"{routing_decision.use_image_inspector}; "
+                "use_ocr="
+                f"{routing_decision.use_ocr}; "
+                f"{routing_decision.reasoning}"
+            ),
+        )
     )
 
     tool_trace.append(
-        router_record
-    )
-
-    image_tool_record = ToolCallRecord(
-        tool_name="image_inspector",
-        tool_input={
-            "image_path": example.image_path,
-            "claim": example.claim,
-            "context": example.context,
-        },
-        tool_output_summary=(
-            inspection.scene_description
-        ),
-    )
-
-    tool_trace.append(
-        image_tool_record
-    )
-
-    if ocr_extraction is not None:
-        ocr_tool_record = ToolCallRecord(
-            tool_name="ocr_tool",
+        ToolCallRecord(
+            tool_name="image_inspector",
             tool_input={
                 "image_path": example.image_path,
                 "claim": example.claim,
-                "text_targets": (
-                    routing_decision.text_targets
+                "context": example.context,
+            },
+            tool_output_summary=(
+                inspection.scene_description
+            ),
+        )
+    )
+
+    if ocr_extraction is not None:
+        tool_trace.append(
+            ToolCallRecord(
+                tool_name="ocr_tool",
+                tool_input={
+                    "image_path": example.image_path,
+                    "claim": example.claim,
+                    "text_targets": (
+                        routing_decision.text_targets
+                    ),
+                },
+                tool_output_summary=(
+                    f"Detected "
+                    f"{len(ocr_extraction.detected_text)} "
+                    f"text span(s); "
+                    f"{len(ocr_extraction.target_matches)} "
+                    f"target match(es); "
+                    f"{len(ocr_extraction.target_mismatches)} "
+                    f"target mismatch(es)."
+                ),
+            )
+        )
+
+    tool_trace.append(
+        ToolCallRecord(
+            tool_name="verification_reasoner",
+            tool_input={
+                "claim": example.claim,
+                "used_ocr": (
+                    ocr_extraction is not None
+                ),
+                "visual_observation_count": len(
+                    decision.relevant_visual_observations
+                ),
+                "ocr_observation_count": len(
+                    decision.relevant_ocr_observations
                 ),
             },
             tool_output_summary=(
-                f"Detected "
-                f"{len(ocr_extraction.detected_text)} "
-                f"text span(s); "
-                f"{len(ocr_extraction.target_matches)} "
-                f"target match(es); "
-                f"{len(ocr_extraction.target_mismatches)} "
-                f"target mismatch(es)."
+                f"Label: {decision.label}; "
+                f"confidence: "
+                f"{decision.confidence:.2f}"
             ),
         )
-
-        tool_trace.append(
-            ocr_tool_record
-        )
-
-    verifier_record = ToolCallRecord(
-        tool_name="verification_reasoner",
-        tool_input={
-            "claim": example.claim,
-            "used_ocr": (
-                ocr_extraction is not None
-            ),
-            "visual_observation_count": (
-                len(
-                    decision.relevant_visual_observations
-                )
-            ),
-            "ocr_observation_count": (
-                len(
-                    decision.relevant_ocr_observations
-                )
-            ),
-        },
-        tool_output_summary=(
-            f"Label: {decision.label}; "
-            f"confidence: {decision.confidence:.2f}"
-        ),
-    )
-
-    tool_trace.append(
-        verifier_record
     )
 
     return VerificationResult(
@@ -298,6 +283,7 @@ Return the final structured verification decision.
         label=decision.label,
         confidence=decision.confidence,
         rationale=decision.rationale,
+        routing_decision=routing_decision,
         evidence=evidence_items,
         tool_trace=tool_trace,
     )

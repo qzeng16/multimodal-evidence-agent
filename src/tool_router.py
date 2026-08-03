@@ -32,7 +32,7 @@ TEXT_KEYWORDS = [
 ]
 
 
-def find_text_targets(
+def find_quoted_text_targets(
     claim: str,
 ) -> List[str]:
     """
@@ -59,6 +59,47 @@ def find_text_targets(
     )
 
 
+def find_year_targets(
+    claim: str,
+) -> List[str]:
+    """
+    Extract four-digit year-like values from a claim.
+
+    Examples:
+        "installed in 2024" -> ["2024"]
+        "built in 1998" -> ["1998"]
+    """
+
+    return re.findall(
+        r"\b(?:19|20)\d{2}\b",
+        claim,
+    )
+
+
+def deduplicate_targets(
+    targets: List[str],
+) -> List[str]:
+    """Remove duplicate targets while preserving order."""
+
+    unique_targets: List[str] = []
+    seen = set()
+
+    for target in targets:
+        cleaned_target = target.strip()
+        normalized_target = cleaned_target.lower()
+
+        if not normalized_target:
+            continue
+
+        if normalized_target in seen:
+            continue
+
+        seen.add(normalized_target)
+        unique_targets.append(cleaned_target)
+
+    return unique_targets
+
+
 def keyword_is_present(
     claim: str,
     keyword: str,
@@ -66,7 +107,7 @@ def keyword_is_present(
     """
     Match one complete word or phrase.
 
-    This prevents a keyword such as "sign" from accidentally
+    This prevents the keyword "sign" from incorrectly
     matching a longer word such as "signal".
     """
 
@@ -109,26 +150,6 @@ def find_matching_keywords(
     ]
 
 
-def contains_year_like_number(
-    claim: str,
-) -> bool:
-    """
-    Detect a four-digit year-like number.
-
-    Examples:
-        2024 -> True
-        1998 -> True
-        28 -> False
-    """
-
-    year_matches = re.findall(
-        r"\b(?:19|20)\d{2}\b",
-        claim,
-    )
-
-    return bool(year_matches)
-
-
 def route_tools(
     claim: str,
 ) -> ToolRoutingDecision:
@@ -138,25 +159,28 @@ def route_tools(
     The Image Inspector is always used.
 
     OCR is added when the claim depends on visible writing,
-    numbers, labels, signs, dates, or readable information.
+    numbers, signs, labels, dates, or other readable content.
     """
 
     matched_keywords = find_matching_keywords(
         claim
     )
 
-    text_targets = find_text_targets(
+    quoted_targets = find_quoted_text_targets(
         claim
     )
 
-    has_year = contains_year_like_number(
+    year_targets = find_year_targets(
         claim
+    )
+
+    text_targets = deduplicate_targets(
+        quoted_targets + year_targets
     )
 
     use_ocr = bool(
         matched_keywords
         or text_targets
-        or has_year
     )
 
     if use_ocr:

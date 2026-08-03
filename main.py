@@ -107,7 +107,7 @@ def select_examples(
     examples: List[VerificationInput],
     example_id: Optional[str],
 ) -> List[VerificationInput]:
-    """Select one example when an example ID is supplied."""
+    """Select one example when an example ID is provided."""
 
     if example_id is None:
         return examples
@@ -273,7 +273,9 @@ def print_verification_result(
 
     print("\nFinal verification result:")
 
-    print(f"Label: {result.label}")
+    print(
+        f"Label: {result.label}"
+    )
 
     print(
         f"Confidence: "
@@ -346,6 +348,16 @@ def process_example(
     print(
         f"Gold label: "
         f"{example.gold_label}"
+    )
+
+    print(
+        f"Category: "
+        f"{example.category}"
+    )
+
+    print(
+        f"Expected use OCR: "
+        f"{example.expected_use_ocr}"
     )
 
     try:
@@ -462,6 +474,17 @@ def process_example(
             print(
                 "Prediction matches gold label: "
                 f"{is_correct}"
+            )
+
+        if example.expected_use_ocr is not None:
+            route_correct = (
+                routing_decision.use_ocr
+                == example.expected_use_ocr
+            )
+
+            print(
+                "OCR routing matches annotation: "
+                f"{route_correct}"
             )
 
     except (

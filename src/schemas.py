@@ -19,6 +19,10 @@ class VerificationInput(BaseModel):
     context: Optional[str] = None
     gold_label: Optional[VerificationLabel] = None
 
+    # Evaluation annotations
+    category: Optional[str] = None
+    expected_use_ocr: Optional[bool] = None
+
 
 class EvidenceItem(BaseModel):
     """One piece of evidence used for verification."""
@@ -156,6 +160,8 @@ class VerificationResult(BaseModel):
     )
 
     rationale: str
+
+    routing_decision: ToolRoutingDecision
 
     evidence: List[EvidenceItem] = Field(
         default_factory=list
