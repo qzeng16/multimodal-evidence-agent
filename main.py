@@ -1,3 +1,4 @@
+import argparse
 import json
 from pathlib import Path
 from typing import List, Optional
@@ -24,17 +25,31 @@ from src.tool_router import route_tools
 from src.verifier import verify_claim
 
 
-DATA_PATH = Path(
-    "data/samples.jsonl"
-)
+DATA_PATH = Path("data/samples.jsonl")
+PREDICTIONS_PATH = Path("outputs/predictions.jsonl")
+METRICS_PATH = Path("outputs/metrics.json")
 
-PREDICTIONS_PATH = Path(
-    "outputs/predictions.jsonl"
-)
 
-METRICS_PATH = Path(
-    "outputs/metrics.json"
-)
+def parse_arguments() -> argparse.Namespace:
+    """Parse command-line arguments."""
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run the multimodal evidence verification agent."
+        )
+    )
+
+    parser.add_argument(
+        "--example-id",
+        type=str,
+        default=None,
+        help=(
+            "Run only one example, such as sample_004. "
+            "When omitted, all examples are processed."
+        ),
+    )
+
+    return parser.parse_args()
 
 
 def load_examples(
@@ -47,9 +62,7 @@ def load_examples(
             f"Dataset not found: {path}"
         )
 
-    examples: List[
-        VerificationInput
-    ] = []
+    examples: List[VerificationInput] = []
 
     with path.open(
         "r",
@@ -65,9 +78,7 @@ def load_examples(
                 continue
 
             try:
-                raw_example = json.loads(
-                    line
-                )
+                raw_example = json.loads(line)
 
                 example = (
                     VerificationInput.model_validate(
@@ -75,9 +86,7 @@ def load_examples(
                     )
                 )
 
-                examples.append(
-                    example
-                )
+                examples.append(example)
 
             except json.JSONDecodeError as error:
                 raise ValueError(
@@ -92,6 +101,29 @@ def load_examples(
                 ) from error
 
     return examples
+
+
+def select_examples(
+    examples: List[VerificationInput],
+    example_id: Optional[str],
+) -> List[VerificationInput]:
+    """Select one example when an example ID is supplied."""
+
+    if example_id is None:
+        return examples
+
+    selected_examples = [
+        example
+        for example in examples
+        if example.example_id == example_id
+    ]
+
+    if not selected_examples:
+        raise ValueError(
+            f"Example ID not found: {example_id}"
+        )
+
+    return selected_examples
 
 
 def print_routing_decision(
@@ -130,13 +162,12 @@ def print_routing_decision(
 def print_visual_inspection(
     inspection: VisualInspection,
 ) -> None:
-    """Print Image Inspector evidence."""
+    """Print evidence returned by the Image Inspector."""
 
     print("\nVisual inspection:")
 
     print(
-        f"Scene: "
-        f"{inspection.scene_description}"
+        f"Scene: {inspection.scene_description}"
     )
 
     print("\nSupporting observations:")
@@ -145,9 +176,7 @@ def print_visual_inspection(
         for observation in (
             inspection.supporting_observations
         ):
-            print(
-                f"- {observation}"
-            )
+            print(f"- {observation}")
     else:
         print("- None")
 
@@ -157,33 +186,23 @@ def print_visual_inspection(
         for observation in (
             inspection.contradicting_observations
         ):
-            print(
-                f"- {observation}"
-            )
+            print(f"- {observation}")
     else:
         print("- None")
 
     print("\nVisible text:")
 
     if inspection.visible_text:
-        for visible_text in (
-            inspection.visible_text
-        ):
-            print(
-                f"- {visible_text}"
-            )
+        for visible_text in inspection.visible_text:
+            print(f"- {visible_text}")
     else:
         print("- None")
 
     print("\nUncertainty notes:")
 
     if inspection.uncertainty_notes:
-        for note in (
-            inspection.uncertainty_notes
-        ):
-            print(
-                f"- {note}"
-            )
+        for note in inspection.uncertainty_notes:
+            print(f"- {note}")
     else:
         print("- None")
 
@@ -191,7 +210,7 @@ def print_visual_inspection(
 def print_ocr_extraction(
     extraction: OCRExtraction,
 ) -> None:
-    """Print structured OCR evidence."""
+    """Print evidence returned by the OCR tool."""
 
     print("\nOCR extraction:")
 
@@ -225,36 +244,24 @@ def print_ocr_extraction(
     print("\nTarget matches:")
 
     if extraction.target_matches:
-        for match in (
-            extraction.target_matches
-        ):
-            print(
-                f"- {match}"
-            )
+        for match in extraction.target_matches:
+            print(f"- {match}")
     else:
         print("- None")
 
     print("\nTarget mismatches:")
 
     if extraction.target_mismatches:
-        for mismatch in (
-            extraction.target_mismatches
-        ):
-            print(
-                f"- {mismatch}"
-            )
+        for mismatch in extraction.target_mismatches:
+            print(f"- {mismatch}")
     else:
         print("- None")
 
     print("\nOCR uncertainty notes:")
 
     if extraction.uncertainty_notes:
-        for note in (
-            extraction.uncertainty_notes
-        ):
-            print(
-                f"- {note}"
-            )
+        for note in extraction.uncertainty_notes:
+            print(f"- {note}")
     else:
         print("- None")
 
@@ -266,9 +273,7 @@ def print_verification_result(
 
     print("\nFinal verification result:")
 
-    print(
-        f"Label: {result.label}"
-    )
+    print(f"Label: {result.label}")
 
     print(
         f"Confidence: "
@@ -283,9 +288,7 @@ def print_verification_result(
     print("\nSelected evidence:")
 
     if result.evidence:
-        for evidence in (
-            result.evidence
-        ):
+        for evidence in result.evidence:
             print(
                 f"- [{evidence.modality}] "
                 f"{evidence.content}"
@@ -318,9 +321,7 @@ def process_example(
 ) -> Optional[VerificationResult]:
     """Run the dynamic tool-using pipeline for one example."""
 
-    result: Optional[
-        VerificationResult
-    ] = None
+    result: Optional[VerificationResult] = None
 
     print(
         f"Example ID: "
@@ -429,6 +430,7 @@ def process_example(
             print_ocr_extraction(
                 ocr_extraction
             )
+
         else:
             print(
                 "\nOCR Tool skipped by router."
@@ -487,10 +489,17 @@ def process_example(
 
 
 def main() -> None:
-    """Run the dynamic multimodal verification pipeline."""
+    """Run the multimodal verification pipeline."""
 
-    examples = load_examples(
+    arguments = parse_arguments()
+
+    all_examples = load_examples(
         DATA_PATH
+    )
+
+    examples = select_examples(
+        examples=all_examples,
+        example_id=arguments.example_id,
     )
 
     print(
@@ -498,9 +507,7 @@ def main() -> None:
         "verification example(s).\n"
     )
 
-    results: List[
-        VerificationResult
-    ] = []
+    results: List[VerificationResult] = []
 
     for example in examples:
         result = process_example(
@@ -508,9 +515,7 @@ def main() -> None:
         )
 
         if result is not None:
-            results.append(
-                result
-            )
+            results.append(result)
 
     save_predictions(
         examples=examples,

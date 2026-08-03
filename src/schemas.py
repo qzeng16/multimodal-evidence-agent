@@ -48,7 +48,7 @@ class ToolCallRecord(BaseModel):
 
 
 class VisualInspection(BaseModel):
-    """Structured evidence extracted from an image."""
+    """Structured visual evidence extracted from an image."""
 
     scene_description: str
 
@@ -70,7 +70,7 @@ class VisualInspection(BaseModel):
 
 
 class ToolRoutingDecision(BaseModel):
-    """Tools selected for processing one verification claim."""
+    """Tools selected for processing one claim."""
 
     use_image_inspector: bool = True
     use_ocr: bool = False
@@ -87,10 +87,9 @@ class ToolRoutingDecision(BaseModel):
 
 
 class OCRTextSpan(BaseModel):
-    """One piece of text detected by the OCR tool."""
+    """One text span detected by the OCR tool."""
 
     text: str
-
     location: str
 
     confidence: float = Field(
@@ -105,7 +104,7 @@ class OCRTextSpan(BaseModel):
 
 
 class OCRExtraction(BaseModel):
-    """Structured text evidence extracted from an image."""
+    """Structured OCR evidence extracted from an image."""
 
     detected_text: List[OCRTextSpan] = Field(
         default_factory=list
@@ -136,7 +135,11 @@ class VerificationDecision(BaseModel):
 
     rationale: str
 
-    relevant_observations: List[str] = Field(
+    relevant_visual_observations: List[str] = Field(
+        default_factory=list
+    )
+
+    relevant_ocr_observations: List[str] = Field(
         default_factory=list
     )
 

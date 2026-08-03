@@ -39,7 +39,7 @@ def find_text_targets(
     Extract text enclosed in single or double quotation marks.
 
     Example:
-        The street sign says "28th St."
+        The sign says "28th St."
         -> ["28th St."]
     """
 
@@ -59,24 +59,54 @@ def find_text_targets(
     )
 
 
+def keyword_is_present(
+    claim: str,
+    keyword: str,
+) -> bool:
+    """
+    Match one complete word or phrase.
+
+    This prevents a keyword such as "sign" from accidentally
+    matching a longer word such as "signal".
+    """
+
+    escaped_keyword = re.escape(
+        keyword
+    )
+
+    escaped_keyword = escaped_keyword.replace(
+        r"\ ",
+        r"\s+",
+    )
+
+    pattern = (
+        rf"(?<!\w)"
+        rf"{escaped_keyword}"
+        rf"(?!\w)"
+    )
+
+    return bool(
+        re.search(
+            pattern,
+            claim,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
 def find_matching_keywords(
     claim: str,
 ) -> List[str]:
-    """
-    Find text-related keywords in a claim.
+    """Find text-related keywords in a claim."""
 
-    The comparison is case-insensitive.
-    """
-
-    normalized_claim = claim.lower()
-
-    matched_keywords = [
+    return [
         keyword
         for keyword in TEXT_KEYWORDS
-        if keyword in normalized_claim
+        if keyword_is_present(
+            claim,
+            keyword,
+        )
     ]
-
-    return matched_keywords
 
 
 def contains_year_like_number(
@@ -105,11 +135,10 @@ def route_tools(
     """
     Select tools for one verification claim.
 
-    The Image Inspector is always used because the system
-    verifies claims against an image.
+    The Image Inspector is always used.
 
     OCR is added when the claim depends on visible writing,
-    numbers, labels, signs, dates, or other readable content.
+    numbers, labels, signs, dates, or readable information.
     """
 
     matched_keywords = find_matching_keywords(
@@ -150,4 +179,4 @@ def route_tools(
         reasoning=reasoning,
         matched_keywords=matched_keywords,
         text_targets=text_targets,
-    ) 
+    )
