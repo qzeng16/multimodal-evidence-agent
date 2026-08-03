@@ -1,0 +1,5 @@
+{"example_id":"sample_001","claim":"The traffic light in the image is red.","image_path":"data/images/sample_001.png","context":"The image shows a street intersection.","gold_label":"supported"}
+{"example_id":"sample_002","claim":"The traffic light in the image is green.","image_path":"data/images/sample_001.png","context":"The image shows a street intersection.","gold_label":"refuted"}
+{"example_id":"sample_003","claim":"The traffic light was installed in 2024.","image_path":"data/images/sample_001.png","context":"The image shows a street intersection.","gold_label":"insufficient"}
+{"example_id":"sample_004","claim":"The street sign says \"28th St.\"","image_path":"data/images/sample_001.png","context":"The claim refers to the large blue street sign near the upper-left traffic light.","gold_label":"supported"}
+{"example_id":"sample_005","claim":"The street sign says \"29th St.\"","image_path":"data/images/sample_001.png","context":"The claim refers to the large blue street sign near the upper-left traffic light.","gold_label":"refuted"}
