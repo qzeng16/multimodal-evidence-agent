@@ -1,10 +1,11 @@
 import argparse
-import json
 from pathlib import Path
 from typing import List, Optional
 
-from pydantic import ValidationError
-
+from src.dataset import (
+    load_examples,
+    select_examples,
+)
 from src.evaluator import (
     evaluate_predictions,
     print_evaluation_report,
@@ -29,6 +30,12 @@ DATA_PATH = Path("data/samples.jsonl")
 PREDICTIONS_PATH = Path("outputs/predictions.jsonl")
 METRICS_PATH = Path("outputs/metrics.json")
 
+MODEL_TOOL_NAMES = {
+    "image_inspector",
+    "ocr_tool",
+    "verification_reasoner",
+}
+
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -49,81 +56,50 @@ def parse_arguments() -> argparse.Namespace:
         ),
     )
 
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help=(
+            "Disable the Image Inspector and OCR disk cache. "
+            "Useful for uncached latency measurements."
+        ),
+    )
+
     return parser.parse_args()
 
 
-def load_examples(
-    path: Path,
-) -> List[VerificationInput]:
-    """Load and validate examples from a JSONL file."""
+def count_logical_model_calls(
+    execution: PipelineExecution,
+) -> int:
+    """
+    Count model stages in the logical tool path.
 
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Dataset not found: {path}"
-        )
+    This count does not change when a stage is served from cache.
+    """
 
-    examples: List[VerificationInput] = []
-
-    with path.open(
-        "r",
-        encoding="utf-8",
-    ) as file:
-        for line_number, line in enumerate(
-            file,
-            start=1,
-        ):
-            line = line.strip()
-
-            if not line:
-                continue
-
-            try:
-                raw_example = json.loads(line)
-
-                example = (
-                    VerificationInput.model_validate(
-                        raw_example
-                    )
-                )
-
-                examples.append(example)
-
-            except json.JSONDecodeError as error:
-                raise ValueError(
-                    f"Invalid JSON on line "
-                    f"{line_number}: {error}"
-                ) from error
-
-            except ValidationError as error:
-                raise ValueError(
-                    f"Invalid example on line "
-                    f"{line_number}: {error}"
-                ) from error
-
-    return examples
+    return sum(
+        tool_call.tool_name in MODEL_TOOL_NAMES
+        for tool_call in execution.result.tool_trace
+    )
 
 
-def select_examples(
-    examples: List[VerificationInput],
-    example_id: Optional[str],
-) -> List[VerificationInput]:
-    """Select one example when an example ID is provided."""
+def calculate_cache_hit_rate(
+    execution: PipelineExecution,
+) -> float:
+    """Calculate the cache hit rate for one execution."""
 
-    if example_id is None:
-        return examples
+    cache_lookups = (
+        execution.cache_hits
+        + execution.cache_misses
+    )
 
-    selected_examples = [
-        example
-        for example in examples
-        if example.example_id == example_id
-    ]
+    if cache_lookups == 0:
+        return 0.0
 
-    if not selected_examples:
-        raise ValueError(
-            f"Example ID not found: {example_id}"
-        )
-
-    return selected_examples
+    return (
+        execution.cache_hits
+        / cache_lookups
+    )
 
 
 def print_routing_decision(
@@ -321,9 +297,19 @@ def print_verification_result(
 def print_pipeline_metrics(
     execution: PipelineExecution,
 ) -> None:
-    """Print latency and model-call information."""
+    """Print latency, cache, and model-call information."""
 
     latency = execution.latency
+
+    cache_hit_rate = calculate_cache_hit_rate(
+        execution
+    )
+
+    logical_model_calls = (
+        count_logical_model_calls(
+            execution
+        )
+    )
 
     print("\nPipeline performance:")
 
@@ -353,14 +339,166 @@ def print_pipeline_metrics(
     )
 
     print(
-        "Model call count: "
+        "Cache enabled: "
+        f"{execution.cache_enabled}"
+    )
+
+    print(
+        "Cache hits: "
+        f"{execution.cache_hits}"
+    )
+
+    print(
+        "Cache misses: "
+        f"{execution.cache_misses}"
+    )
+
+    print(
+        "Cache hit rate: "
+        f"{cache_hit_rate:.3f}"
+    )
+
+    print(
+        "Logical model path calls: "
+        f"{logical_model_calls}"
+    )
+
+    print(
+        "Actual model API calls: "
         f"{execution.model_call_count}"
+    )
+
+
+def print_runtime_cache_report(
+    executions: List[PipelineExecution],
+) -> None:
+    """Print aggregate runtime and cache statistics."""
+
+    print("\n" + "=" * 60)
+    print("RUNTIME CACHE METRICS")
+    print("=" * 60)
+
+    if not executions:
+        print("Executions: 0")
+        return
+
+    total_cache_hits = sum(
+        execution.cache_hits
+        for execution in executions
+    )
+
+    total_cache_misses = sum(
+        execution.cache_misses
+        for execution in executions
+    )
+
+    total_cache_lookups = (
+        total_cache_hits
+        + total_cache_misses
+    )
+
+    if total_cache_lookups == 0:
+        cache_hit_rate = 0.0
+    else:
+        cache_hit_rate = (
+            total_cache_hits
+            / total_cache_lookups
+        )
+
+    total_actual_model_calls = sum(
+        execution.model_call_count
+        for execution in executions
+    )
+
+    total_logical_model_calls = sum(
+        count_logical_model_calls(
+            execution
+        )
+        for execution in executions
+    )
+
+    average_actual_model_calls = (
+        total_actual_model_calls
+        / len(executions)
+    )
+
+    average_logical_model_calls = (
+        total_logical_model_calls
+        / len(executions)
+    )
+
+    average_total_latency = (
+        sum(
+            execution.latency.total_seconds
+            for execution in executions
+        )
+        / len(executions)
+    )
+
+    avoided_model_calls = (
+        total_logical_model_calls
+        - total_actual_model_calls
+    )
+
+    print(
+        f"Executions: {len(executions)}"
+    )
+
+    print(
+        f"Cache lookups: "
+        f"{total_cache_lookups}"
+    )
+
+    print(
+        f"Cache hits: "
+        f"{total_cache_hits}"
+    )
+
+    print(
+        f"Cache misses: "
+        f"{total_cache_misses}"
+    )
+
+    print(
+        f"Cache hit rate: "
+        f"{cache_hit_rate:.3f}"
+    )
+
+    print(
+        f"Total logical model path calls: "
+        f"{total_logical_model_calls}"
+    )
+
+    print(
+        f"Total actual model API calls: "
+        f"{total_actual_model_calls}"
+    )
+
+    print(
+        f"Model calls avoided by cache: "
+        f"{avoided_model_calls}"
+    )
+
+    print(
+        f"Average logical model path calls: "
+        f"{average_logical_model_calls:.3f}"
+    )
+
+    print(
+        f"Average actual model API calls: "
+        f"{average_actual_model_calls:.3f}"
+    )
+
+    print(
+        f"Average total latency: "
+        f"{average_total_latency:.3f} seconds"
     )
 
 
 def process_example(
     example: VerificationInput,
-) -> Optional[VerificationResult]:
+    use_cache: bool,
+) -> Optional[PipelineExecution]:
     """Run the reusable pipeline for one example."""
 
     print(
@@ -435,7 +573,8 @@ def process_example(
         )
 
         execution = run_verification(
-            example
+            example,
+            use_cache=use_cache,
         )
 
         print_routing_decision(
@@ -463,11 +602,9 @@ def process_example(
             execution
         )
 
-        result = execution.result
-
         if example.gold_label is not None:
             is_correct = (
-                result.label
+                execution.result.label
                 == example.gold_label
             )
 
@@ -489,7 +626,7 @@ def process_example(
                 f"{route_correct}"
             )
 
-        return result
+        return execution
 
     except (
         FileNotFoundError,
@@ -508,10 +645,6 @@ def process_example(
             f"{error}"
         )
 
-    print(
-        "\n" + "-" * 60
-    )
-
     return None
 
 
@@ -519,6 +652,8 @@ def main() -> None:
     """Run the multimodal verification CLI."""
 
     arguments = parse_arguments()
+
+    use_cache = not arguments.no_cache
 
     all_examples = load_examples(
         DATA_PATH
@@ -534,7 +669,15 @@ def main() -> None:
         "verification example(s).\n"
     )
 
+    print(
+        f"Disk cache enabled: {use_cache}\n"
+    )
+
     results: List[VerificationResult] = []
+
+    executions: List[
+        PipelineExecution
+    ] = []
 
     for index, example in enumerate(
         examples,
@@ -545,12 +688,19 @@ def main() -> None:
                 "\n" + "-" * 60
             )
 
-        result = process_example(
-            example
+        execution = process_example(
+            example=example,
+            use_cache=use_cache,
         )
 
-        if result is not None:
-            results.append(result)
+        if execution is not None:
+            executions.append(
+                execution
+            )
+
+            results.append(
+                execution.result
+            )
 
     save_predictions(
         examples=examples,
@@ -570,6 +720,10 @@ def main() -> None:
 
     print_evaluation_report(
         metrics
+    )
+
+    print_runtime_cache_report(
+        executions
     )
 
     print("\nSaved files:")

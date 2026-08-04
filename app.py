@@ -1,15 +1,14 @@
-import json
 from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
-from pydantic import (
-    BaseModel,
-    Field,
-    ValidationError,
-)
+from pydantic import BaseModel, Field
 
+from src.dataset import (
+    find_example_by_id,
+    load_examples,
+)
 from src.pipeline import (
     PipelineExecution,
     PipelineLatency,
@@ -40,6 +39,12 @@ ALLOWED_IMAGE_ROOT = (
     / "images"
 ).resolve()
 
+MODEL_TOOL_NAMES = {
+    "image_inspector",
+    "ocr_tool",
+    "verification_reasoner",
+}
+
 
 app = FastAPI(
     title=(
@@ -49,14 +54,14 @@ app = FastAPI(
     description=(
         "Verify textual claims against image evidence "
         "using dynamic tool routing, visual inspection, "
-        "blind OCR, and structured reasoning."
+        "blind OCR, structured reasoning, and disk caching."
     ),
-    version="1.0.0",
+    version="1.1.0",
 )
 
 
 class VerificationRequest(BaseModel):
-    """Request body for a new verification task."""
+    """Request body for a verification task."""
 
     claim: str = Field(
         min_length=1
@@ -69,9 +74,11 @@ class VerificationRequest(BaseModel):
     context: Optional[str] = None
     example_id: Optional[str] = None
 
+    use_cache: bool = True
+
 
 class VerificationResponse(BaseModel):
-    """Public API response for one verification task."""
+    """Public response for one verification task."""
 
     example_id: str
     label: VerificationLabel
@@ -100,76 +107,65 @@ class VerificationResponse(BaseModel):
 
     latency: PipelineLatency
 
+    cache_enabled: bool
+    cache_hits: int = Field(ge=0)
+    cache_misses: int = Field(ge=0)
+
+    cache_hit_rate: float = Field(
+        ge=0.0,
+        le=1.0,
+    )
+
+    logical_model_call_count: int = Field(
+        ge=0
+    )
+
+    actual_model_call_count: int = Field(
+        ge=0
+    )
+
     model_call_count: int = Field(
         ge=0
     )
 
 
-def load_examples(
-    path: Path,
-) -> List[VerificationInput]:
-    """Load verification examples from JSONL."""
+def calculate_cache_hit_rate(
+    execution: PipelineExecution,
+) -> float:
+    """Calculate cache hit rate for one request."""
 
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Dataset not found: {path}"
-        )
+    cache_lookups = (
+        execution.cache_hits
+        + execution.cache_misses
+    )
 
-    examples: List[
-        VerificationInput
-    ] = []
+    if cache_lookups == 0:
+        return 0.0
 
-    with path.open(
-        "r",
-        encoding="utf-8",
-    ) as file:
-        for line_number, line in enumerate(
-            file,
-            start=1,
-        ):
-            line = line.strip()
+    return (
+        execution.cache_hits
+        / cache_lookups
+    )
 
-            if not line:
-                continue
 
-            try:
-                raw_example = json.loads(
-                    line
-                )
+def count_logical_model_calls(
+    execution: PipelineExecution,
+) -> int:
+    """Count model stages in the logical tool path."""
 
-                example = (
-                    VerificationInput.model_validate(
-                        raw_example
-                    )
-                )
-
-            except json.JSONDecodeError as error:
-                raise ValueError(
-                    f"Invalid JSON on dataset line "
-                    f"{line_number}: {error}"
-                ) from error
-
-            except ValidationError as error:
-                raise ValueError(
-                    f"Invalid example on dataset line "
-                    f"{line_number}: {error}"
-                ) from error
-
-            examples.append(
-                example
-            )
-
-    return examples
+    return sum(
+        tool_call.tool_name in MODEL_TOOL_NAMES
+        for tool_call in execution.result.tool_trace
+    )
 
 
 def validate_image_path(
     image_path: str,
 ) -> str:
     """
-    Validate that an API image path is inside data/images.
+    Validate that an image is inside data/images.
 
-    This prevents callers from asking the server to read
-    arbitrary local files.
+    This prevents callers from reading arbitrary local files.
     """
 
     candidate_path = Path(
@@ -224,9 +220,19 @@ def validate_image_path(
 def build_response(
     execution: PipelineExecution,
 ) -> VerificationResponse:
-    """Convert an internal pipeline result into an API response."""
+    """Convert an internal execution into an API response."""
 
     result = execution.result
+
+    cache_hit_rate = calculate_cache_hit_rate(
+        execution
+    )
+
+    logical_model_call_count = (
+        count_logical_model_calls(
+            execution
+        )
+    )
 
     return VerificationResponse(
         example_id=result.example_id,
@@ -242,6 +248,18 @@ def build_response(
         evidence=result.evidence,
         tool_trace=result.tool_trace,
         latency=execution.latency,
+        cache_enabled=(
+            execution.cache_enabled
+        ),
+        cache_hits=execution.cache_hits,
+        cache_misses=execution.cache_misses,
+        cache_hit_rate=cache_hit_rate,
+        logical_model_call_count=(
+            logical_model_call_count
+        ),
+        actual_model_call_count=(
+            execution.model_call_count
+        ),
         model_call_count=(
             execution.model_call_count
         ),
@@ -250,12 +268,14 @@ def build_response(
 
 def execute_example(
     example: VerificationInput,
+    use_cache: bool,
 ) -> VerificationResponse:
     """Run one example and translate errors into HTTP errors."""
 
     try:
         execution = run_verification(
-            example
+            example,
+            use_cache=use_cache,
         )
 
         return build_response(
@@ -295,14 +315,15 @@ def execute_example(
     tags=["system"],
 )
 def health() -> dict:
-    """Return API health status without calling a model."""
+    """Return API status without calling a model."""
 
     return {
         "status": "ok",
         "service": (
             "multimodal-evidence-agent"
         ),
-        "version": "1.0.0",
+        "version": "1.1.0",
+        "disk_cache_supported": True,
     }
 
 
@@ -348,7 +369,8 @@ def verify(
     )
 
     return execute_example(
-        example
+        example=example,
+        use_cache=request.use_cache,
     )
 
 
@@ -359,6 +381,7 @@ def verify(
 )
 def verify_example(
     example_id: str,
+    use_cache: bool = True,
 ) -> VerificationResponse:
     """Run one example from data/samples.jsonl."""
 
@@ -376,14 +399,9 @@ def verify_example(
             detail=str(error),
         ) from error
 
-    selected_example = next(
-        (
-            example
-            for example in examples
-            if example.example_id
-            == example_id
-        ),
-        None,
+    selected_example = find_example_by_id(
+        examples=examples,
+        example_id=example_id,
     )
 
     if selected_example is None:
@@ -422,5 +440,6 @@ def verify_example(
     )
 
     return execute_example(
-        selected_example
+        example=selected_example,
+        use_cache=use_cache,
     )
