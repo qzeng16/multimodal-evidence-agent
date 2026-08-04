@@ -1,0 +1,99 @@
+{
+  "experiment_name": "Rotated Text OCR Ablation",
+  "description": "Comparison of single-view blind OCR and multi-view blind OCR on small, curved, and rotated text printed on a bowl rim.",
+  "image_path": "data/images/openimages/583a3460c32053a1.jpg",
+  "ground_truth_text": "MADAM MAM'S",
+  "examples": [
+    {
+      "example_id": "sample_012",
+      "claim": "The bowl rim says \"MADAM MAM'S\".",
+      "gold_label": "supported"
+    },
+    {
+      "example_id": "sample_013",
+      "claim": "The bowl rim says \"SIAM VILLAGE\".",
+      "gold_label": "refuted"
+    }
+  ],
+  "qualitative_failure": {
+    "method": "claim_conditioned_single_view_ocr",
+    "included_in_formal_accuracy": false,
+    "reason": "These earlier runs used an incorrect initial annotation and are retained only as evidence of instability and potential target leakage risk.",
+    "observations": [
+      {
+        "run": 1,
+        "claim_target": "SIAM VILLAGE",
+        "ocr_transcription": "SIAM VILLAGE",
+        "ocr_confidence": 0.98,
+        "final_prediction": "supported",
+        "final_confidence": 0.98
+      },
+      {
+        "run": 2,
+        "claim_target": "SIAM VILLAGE",
+        "ocr_transcription": "SIAM I WOK",
+        "ocr_confidence": 0.82,
+        "final_prediction": "refuted",
+        "final_confidence": 0.78
+      }
+    ]
+  },
+  "methods": [
+    {
+      "method_id": "blind_single_view",
+      "method_name": "Blind Single-View OCR",
+      "description": "The OCR model receives only the original image. The claim target is compared locally after transcription.",
+      "views": [
+        "full_original"
+      ],
+      "results": [
+        {
+          "example_id": "sample_012",
+          "gold_label": "supported",
+          "predicted_label": "insufficient",
+          "ocr_transcription": "JIMMY WONG'S",
+          "ocr_confidence": 0.74,
+          "prediction_confidence": 0.72
+        },
+        {
+          "example_id": "sample_013",
+          "gold_label": "refuted",
+          "predicted_label": "insufficient",
+          "ocr_transcription": "SIAM INN TOO",
+          "ocr_confidence": 0.83,
+          "prediction_confidence": 0.86
+        }
+      ]
+    },
+    {
+      "method_id": "multi_view_blind",
+      "method_name": "Multi-View Blind OCR",
+      "description": "The OCR model receives the original image, an enlarged crop, rotated crops, and a high-contrast crop. It remains blind to the claim target.",
+      "views": [
+        "full_original",
+        "region_upscaled",
+        "region_rot90",
+        "region_rot270",
+        "region_high_contrast_rot270"
+      ],
+      "results": [
+        {
+          "example_id": "sample_012",
+          "gold_label": "supported",
+          "predicted_label": "supported",
+          "ocr_transcription": "MADAM MAM'S",
+          "ocr_confidence": 0.93,
+          "prediction_confidence": 0.98
+        },
+        {
+          "example_id": "sample_013",
+          "gold_label": "refuted",
+          "predicted_label": "refuted",
+          "ocr_transcription": "MADAM MAM'S",
+          "ocr_confidence": 0.97,
+          "prediction_confidence": 0.97
+        }
+      ]
+    }
+  ]
+}
