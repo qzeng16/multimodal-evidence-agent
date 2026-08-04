@@ -11,9 +11,11 @@ from src.evaluator import (
     save_metrics,
     save_predictions,
 )
-from src.image_inspector import inspect_image
 from src.image_loader import load_image_metadata
-from src.ocr_tool import extract_text_from_image
+from src.pipeline import (
+    PipelineExecution,
+    run_verification,
+)
 from src.schemas import (
     OCRExtraction,
     ToolRoutingDecision,
@@ -21,8 +23,6 @@ from src.schemas import (
     VerificationResult,
     VisualInspection,
 )
-from src.tool_router import route_tools
-from src.verifier import verify_claim
 
 
 DATA_PATH = Path("data/samples.jsonl")
@@ -318,12 +318,50 @@ def print_verification_result(
         print("- None")
 
 
+def print_pipeline_metrics(
+    execution: PipelineExecution,
+) -> None:
+    """Print latency and model-call information."""
+
+    latency = execution.latency
+
+    print("\nPipeline performance:")
+
+    print(
+        "Routing latency: "
+        f"{latency.routing_seconds:.3f} seconds"
+    )
+
+    print(
+        "Image Inspector latency: "
+        f"{latency.image_inspector_seconds:.3f} seconds"
+    )
+
+    print(
+        "OCR latency: "
+        f"{latency.ocr_seconds:.3f} seconds"
+    )
+
+    print(
+        "Verification Reasoner latency: "
+        f"{latency.verification_reasoner_seconds:.3f} seconds"
+    )
+
+    print(
+        "Total latency: "
+        f"{latency.total_seconds:.3f} seconds"
+    )
+
+    print(
+        "Model call count: "
+        f"{execution.model_call_count}"
+    )
+
+
 def process_example(
     example: VerificationInput,
 ) -> Optional[VerificationResult]:
-    """Run the dynamic tool-using pipeline for one example."""
-
-    result: Optional[VerificationResult] = None
+    """Run the reusable pipeline for one example."""
 
     print(
         f"Example ID: "
@@ -392,76 +430,40 @@ def process_example(
             f"{metadata['mode']}"
         )
 
-        routing_decision = route_tools(
-            example.claim
+        print(
+            "\nRunning verification pipeline..."
+        )
+
+        execution = run_verification(
+            example
         )
 
         print_routing_decision(
-            routing_decision
-        )
-
-        if not routing_decision.use_image_inspector:
-            raise RuntimeError(
-                "The current pipeline requires "
-                "the Image Inspector."
-            )
-
-        print(
-            "\nCalling Image Inspector..."
-        )
-
-        inspection = inspect_image(
-            image_path=example.image_path,
-            claim=example.claim,
-            context=example.context,
+            execution.routing_decision
         )
 
         print_visual_inspection(
-            inspection
+            execution.inspection
         )
 
-        ocr_extraction: Optional[
-            OCRExtraction
-        ] = None
-
-        if routing_decision.use_ocr:
-            print(
-                "\nCalling OCR Tool..."
-            )
-
-            ocr_extraction = (
-                extract_text_from_image(
-                    image_path=example.image_path,
-                    claim=example.claim,
-                    text_targets=(
-                        routing_decision.text_targets
-                    ),
-                )
-            )
-
+        if execution.ocr_extraction is not None:
             print_ocr_extraction(
-                ocr_extraction
+                execution.ocr_extraction
             )
-
         else:
             print(
                 "\nOCR Tool skipped by router."
             )
 
-        print(
-            "\nCalling Verification Reasoner..."
-        )
-
-        result = verify_claim(
-            example=example,
-            inspection=inspection,
-            routing_decision=routing_decision,
-            ocr_extraction=ocr_extraction,
-        )
-
         print_verification_result(
-            result
+            execution.result
         )
+
+        print_pipeline_metrics(
+            execution
+        )
+
+        result = execution.result
 
         if example.gold_label is not None:
             is_correct = (
@@ -478,7 +480,7 @@ def process_example(
 
         if example.expected_use_ocr is not None:
             route_correct = (
-                routing_decision.use_ocr
+                execution.routing_decision.use_ocr
                 == example.expected_use_ocr
             )
 
@@ -486,6 +488,8 @@ def process_example(
                 "OCR routing matches annotation: "
                 f"{route_correct}"
             )
+
+        return result
 
     except (
         FileNotFoundError,
@@ -508,11 +512,11 @@ def process_example(
         "\n" + "-" * 60
     )
 
-    return result
+    return None
 
 
 def main() -> None:
-    """Run the multimodal verification pipeline."""
+    """Run the multimodal verification CLI."""
 
     arguments = parse_arguments()
 
@@ -532,7 +536,15 @@ def main() -> None:
 
     results: List[VerificationResult] = []
 
-    for example in examples:
+    for index, example in enumerate(
+        examples,
+        start=1,
+    ):
+        if index > 1:
+            print(
+                "\n" + "-" * 60
+            )
+
         result = process_example(
             example
         )
