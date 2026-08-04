@@ -1,0 +1,15 @@
+{
+  "data/images/openimages/583a3460c32053a1.jpg": {
+    "x_min": 0.05859375,
+    "y_min": 0.390625,
+    "x_max": 0.29296875,
+    "y_max": 0.96354167,
+    "description": "Curved dark text along the left side of the blue bowl rim.",
+    "rotations": [
+      0,
+      90,
+      270
+    ],
+    "upscale_factor": 3
+  }
+}
