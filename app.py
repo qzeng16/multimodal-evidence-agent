@@ -14,6 +14,8 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
+from src.demo_routes import router as demo_router
+
 from src.dataset import (
     find_example_by_id,
     load_examples,
@@ -525,3 +527,6 @@ def verify_example(
         example=selected_example,
         use_cache=use_cache,
     )
+
+
+app.include_router(demo_router)
