@@ -16,6 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    env:
+      CONTAINER_NAME: multimodal-evidence-agent-ci
+      IMAGE_NAME: multimodal-evidence-agent:ci
+      SERVICE_API_KEY: ci-test-service-key
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -29,7 +34,7 @@ jobs:
           context: .
           push: false
           load: true
-          tags: multimodal-evidence-agent:ci
+          tags: ${{ env.IMAGE_NAME }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -37,42 +42,141 @@ jobs:
         run: |
           docker run \
             --detach \
-            --name multimodal-evidence-agent-ci \
+            --name "${CONTAINER_NAME}" \
             --env OPENAI_API_KEY=sk-ci-placeholder \
+            --env SERVICE_API_KEY="${SERVICE_API_KEY}" \
             --publish 8000:8000 \
-            multimodal-evidence-agent:ci
+            "${IMAGE_NAME}"
 
-      - name: Check health endpoint
+      - name: Wait for health endpoint
         run: |
           for attempt in {1..30}; do
             if curl \
               --fail \
               --silent \
+              --show-error \
               http://127.0.0.1:8000/health \
               > health.json
             then
-              echo "Container health check passed."
+              echo "Health endpoint is ready."
               cat health.json
               exit 0
             fi
 
-            echo "Waiting for container: attempt ${attempt}/30"
+            echo "Waiting for container: ${attempt}/30"
             sleep 2
           done
 
           echo "Container failed to become ready."
-          docker logs multimodal-evidence-agent-ci
+          docker logs "${CONTAINER_NAME}"
           exit 1
+
+      - name: Verify authentication is enabled
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          response = json.loads(
+              Path("health.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          assert response["status"] == "ok"
+
+          assert (
+              response[
+                  "api_key_authentication_enabled"
+              ]
+              is True
+          )
+
+          print(
+              "API-key authentication is enabled."
+          )
+          PY
+
+      - name: Reject request without API key
+        run: |
+          status_code="$(
+            curl \
+              --silent \
+              --output unauthorized.json \
+              --write-out '%{http_code}' \
+              --request POST \
+              http://127.0.0.1:8000/verify-example/sample_004
+          )"
+
+          cat unauthorized.json
+          echo
+          echo "HTTP status: ${status_code}"
+
+          test "${status_code}" = "401"
+
+      - name: Accept correct API key
+        run: |
+          status_code="$(
+            curl \
+              --silent \
+              --output authorized.json \
+              --write-out '%{http_code}' \
+              --request POST \
+              --header "X-API-Key: ${SERVICE_API_KEY}" \
+              http://127.0.0.1:8000/verify-example/not-a-real-example
+          )"
+
+          cat authorized.json
+          echo
+          echo "HTTP status: ${status_code}"
+
+          test "${status_code}" = "404"
+
+      - name: Validate authentication responses
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          unauthorized = json.loads(
+              Path("unauthorized.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          authorized = json.loads(
+              Path("authorized.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          assert unauthorized == {
+              "detail": (
+                  "Invalid or missing API key."
+              )
+          }
+
+          assert authorized == {
+              "detail": (
+                  "Example ID not found: "
+                  "not-a-real-example"
+              )
+          }
+
+          print(
+              "Authentication smoke tests passed."
+          )
+          PY
 
       - name: Show container logs
         if: always()
         run: |
-          docker logs multimodal-evidence-agent-ci || true
+          docker logs "${CONTAINER_NAME}" || true
 
       - name: Remove container
         if: always()
         run: |
           docker rm \
             --force \
-            multimodal-evidence-agent-ci \
+            "${CONTAINER_NAME}" \
             || true
