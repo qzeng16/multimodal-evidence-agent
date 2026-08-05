@@ -1,137 +1,200 @@
 # Multimodal Evidence Verification Agent
 
+[![Tests](https://github.com/qzeng16/multimodal-evidence-agent/actions/workflows/tests.yml/badge.svg)](https://github.com/qzeng16/multimodal-evidence-agent/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/Python-3.9-blue)
+![FastAPI](https://img.shields.io/badge/API-FastAPI-009688)
+![Testing](https://img.shields.io/badge/tests-38%20passing-brightgreen)
+![Status](https://img.shields.io/badge/status-functional%20prototype-orange)
+
 A tool-using multimodal agent that verifies claims against image evidence and returns one of three labels:
 
 - `supported`
 - `refuted`
 - `insufficient`
 
-The system dynamically selects visual and OCR tools, records its tool-use trace, extracts structured evidence, and evaluates both final verification accuracy and agent routing efficiency.
+The system dynamically routes each claim through visual inspection and optional OCR, extracts structured evidence, performs deterministic text matching, records a complete tool trace, and produces reproducible evaluation artifacts.
 
-## Overview
+---
 
-Multimodal models can often describe an image, but reliable claim verification requires more than producing a plausible answer.
+## Why This Project
 
-A verification system should distinguish between:
+A multimodal model can often describe an image, but reliable verification requires more than a plausible description.
+
+A verification system must distinguish between:
 
 - evidence that directly supports a claim;
 - evidence that directly contradicts a claim;
-- evidence that is missing, ambiguous, unreadable, or insufficient.
+- evidence that is missing, unreadable, ambiguous, or irrelevant.
 
-This project implements an evidence-oriented agent that separates perception, OCR, deterministic text comparison, and final reasoning into distinct stages.
+For example, failing to find the text `2024` in an image does not prove that an object was not installed in 2024. The correct result may be `insufficient`, rather than `refuted`.
 
-The system is designed around four principles:
+This project explores an evidence-oriented agent architecture that separates:
 
-1. Use explicit evidence instead of unsupported assumptions.
-2. Dynamically invoke OCR only when the claim depends on visible text.
-3. Keep OCR independent from the target claim to reduce confirmation bias.
-4. Return `insufficient` when the image cannot establish the requested fact.
+1. tool routing;
+2. visual perception;
+3. blind OCR;
+4. deterministic text comparison;
+5. final evidence-based reasoning.
+
+---
+
+## Key Features
+
+- Deterministic routing between visual inspection and OCR
+- Structured multimodal evidence extraction
+- Claim-independent blind OCR
+- Multi-view OCR for difficult or rotated text
+- Deterministic normalized text matching
+- Three-way verification with explicit insufficient-evidence handling
+- Complete tool-use traces
+- Disk caching for expensive perception calls
+- Runtime latency and model-call metrics
+- FastAPI service
+- Isolated run artifact directories
+- Unit tests and GitHub Actions CI
+
+---
 
 ## System Architecture
 
 ```text
-Image + Claim
-      |
-      v
-Tool Router
-      |
-      +------------------------------+
-      |                              |
-      v                              v
-Image Inspector              Multi-View Blind OCR
-                                     |
-                                     v
-                           Deterministic Text Matcher
-      |                              |
-      +---------------+--------------+
-                      |
-                      v
-            Verification Reasoner
-                      |
-                      v
-     supported / refuted / insufficient
-                      |
-                      v
-       Evidence + Confidence + Tool Trace
+                    Image + Claim
+                          |
+                          v
+                   +--------------+
+                   | Tool Router  |
+                   +--------------+
+                     |          |
+             visual  |          | text-dependent
+                     v          v
+          +----------------+   +----------------------+
+          | Image Inspector|   | Multi-View Blind OCR |
+          +----------------+   +----------------------+
+                     |          |
+                     |          v
+                     |   +----------------------+
+                     |   | Deterministic Matcher|
+                     |   +----------------------+
+                     |          |
+                     +----------+
+                          |
+                          v
+                +----------------------+
+                | Verification Reasoner|
+                +----------------------+
+                          |
+                          v
+        supported / refuted / insufficient
+                          |
+                          v
+       Evidence + Confidence + Tool Trace + Metrics
 ```
+
+The final reasoner operates on structured evidence returned by the tools. It does not directly inspect the original image.
+
+---
+
+## Agent Workflow
 
 ### 1. Tool Router
 
-The router analyzes the claim and decides whether OCR is necessary.
+The deterministic router analyzes the claim and decides whether OCR is required.
 
-Visual claims such as:
+A visual-state claim such as:
 
 ```text
 The traffic light is red.
 ```
 
-use:
+uses:
 
 ```text
-Tool Router
-→ Image Inspector
-→ Verification Reasoner
+tool_router
+→ image_inspector
+→ verification_reasoner
 ```
 
-Text-dependent claims such as:
+A text-dependent claim such as:
 
 ```text
 The street sign says "28th St."
 ```
 
-use:
+uses:
 
 ```text
-Tool Router
-→ Image Inspector
-→ OCR Tool
-→ Verification Reasoner
+tool_router
+→ image_inspector
+→ ocr_tool
+→ verification_reasoner
 ```
 
-The router detects:
+The router detects signals including:
 
 - text-related keywords;
-- quoted text targets;
-- street names and labels;
+- quoted phrases;
+- signs and labels;
 - dates and four-digit years;
-- license plates and other written identifiers.
+- license plates;
+- written identifiers.
+
+Because the router is deterministic, identical claims always produce identical routing decisions.
+
+---
 
 ### 2. Image Inspector
 
 The Image Inspector extracts structured visual evidence:
 
-- scene description;
-- supporting observations;
-- contradicting observations;
-- visible text;
-- uncertainty notes.
+```json
+{
+  "scene_description": "A city intersection with red traffic lights.",
+  "supporting_observations": [
+    "A large blue street sign is visible near the upper-left light."
+  ],
+  "contradicting_observations": [],
+  "visible_text": [
+    "28th St",
+    "2800 W"
+  ],
+  "uncertainty_notes": []
+}
+```
 
-The final verifier does not inspect the original image directly. It reasons over structured evidence produced by the selected tools.
+Its responsibilities include:
+
+- describing the relevant scene;
+- identifying supporting evidence;
+- identifying contradicting evidence;
+- reporting visible text informally;
+- recording uncertainty and visibility limitations.
+
+---
 
 ### 3. Blind OCR
 
 The OCR model does not receive:
 
 - the original claim;
-- the target phrase;
 - the expected label;
-- the gold answer.
+- the gold answer;
+- the target phrase as semantic guidance.
 
 It only receives image views and independently transcribes visible text.
 
-This prevents the OCR model from simply reproducing the phrase mentioned in the claim.
+This reduces confirmation bias. The OCR model cannot simply repeat the phrase mentioned in the claim.
 
-After OCR finishes, a deterministic Python matcher compares the transcription with the target phrase.
+After transcription, a deterministic Python matcher compares the OCR result with the target text.
 
 The matcher normalizes:
 
 - capitalization;
 - punctuation;
-- apostrophe variations;
+- apostrophe variants;
 - repeated whitespace;
-- common Unicode variations.
+- common Unicode variants.
 
-For example:
+Example:
 
 ```text
 Target:   28th St.
@@ -139,11 +202,13 @@ Detected: 28th St
 Result:   Match after normalization
 ```
 
+---
+
 ### 4. Multi-View OCR
 
-Small, curved, rotated, or low-contrast text can be difficult to read from the complete image.
+Small, curved, rotated, or low-contrast text may be difficult to read from the complete image.
 
-For selected difficult regions, the OCR tool generates several views:
+For configured difficult regions, the OCR system can generate:
 
 ```text
 full_original
@@ -153,19 +218,53 @@ region_rot270
 region_high_contrast_rot270
 ```
 
-All views are processed in one OCR model call.
+The views are processed together in one OCR model call.
 
-The current preprocessing pipeline supports:
+The preprocessing pipeline supports:
 
-- manually configured OCR regions;
-- cropping;
+- configurable normalized crop regions;
 - Lanczos upscaling;
 - 90-degree rotations;
 - grayscale conversion;
-- automatic contrast enhancement;
-- multi-view transcription consolidation.
+- contrast enhancement;
+- consolidated multi-view transcription.
 
-### 5. Verification Reasoner
+OCR region configurations are stored in:
+
+```text
+data/ocr_regions.json
+```
+
+---
+
+### 5. Deterministic Text Matcher
+
+The deterministic matcher runs after blind OCR.
+
+It produces:
+
+- target matches;
+- target mismatches;
+- normalized comparisons;
+- relevance scores;
+- uncertainty notes.
+
+This separation is important:
+
+```text
+OCR model:
+What text is visible?
+
+Deterministic matcher:
+Does that text match the claim target?
+
+Verification reasoner:
+What does the combined evidence imply?
+```
+
+---
+
+### 6. Verification Reasoner
 
 The Verification Reasoner receives:
 
@@ -174,7 +273,7 @@ The Verification Reasoner receives:
 - the routing decision;
 - structured visual evidence;
 - optional OCR evidence;
-- deterministic target-match results.
+- deterministic text-match results.
 
 It returns:
 
@@ -182,41 +281,65 @@ It returns:
 {
   "label": "supported",
   "confidence": 0.99,
-  "rationale": "The visible evidence directly supports the claim.",
-  "relevant_visual_observations": [],
-  "relevant_ocr_observations": []
+  "rationale": "The specified sign displays the claimed text.",
+  "relevant_visual_observations": [
+    "The blue street sign is clearly visible."
+  ],
+  "relevant_ocr_observations": [
+    "OCR detected 28th St with high confidence."
+  ]
 }
 ```
 
-For exact-text claims, high-quality OCR evidence is preferred over informal text readings from the general Image Inspector.
+For exact-text claims, OCR evidence is preferred over an informal reading from the general Image Inspector.
 
-The verifier is instructed not to treat missing text as automatic contradiction. For example:
+The reasoner is also instructed not to convert missing evidence into a false contradiction.
+
+Example:
 
 ```text
 Claim:
 The traffic light was installed in 2024.
 
-OCR result:
-The text "2024" was not detected.
+Observed evidence:
+No readable installation date is visible.
 
-Correct decision:
+Decision:
 insufficient
 ```
 
-The absence of a visible date does not prove that the light was not installed in 2024.
+---
 
-## Agent Output
+## Output Labels
 
-Each result contains:
+### `supported`
 
-- final label;
-- confidence;
-- concise rationale;
-- selected evidence;
-- routing decision;
-- complete tool trace.
+The available evidence directly supports the claim.
 
-Example tool trace:
+### `refuted`
+
+The available evidence directly contradicts the claim.
+
+### `insufficient`
+
+The evidence cannot establish whether the claim is true or false.
+
+Common reasons include:
+
+- the relevant detail is not visible;
+- the text is unreadable;
+- the claim concerns a historical fact;
+- identity cannot be established from appearance;
+- the image is ambiguous;
+- absence of evidence is not evidence of the opposite.
+
+---
+
+## Tool Trace and Observability
+
+Each result includes a complete tool trace.
+
+Example:
 
 ```text
 1. tool_router
@@ -225,9 +348,78 @@ Example tool trace:
 4. verification_reasoner
 ```
 
+Each trace entry records:
+
+- tool name;
+- structured tool input;
+- concise output summary.
+
+Runtime metrics include:
+
+- routing latency;
+- Image Inspector latency;
+- OCR latency;
+- Verification Reasoner latency;
+- total latency;
+- cache hits and misses;
+- logical model path calls;
+- actual model API calls.
+
+A logical model call represents a model-backed stage in the selected tool path.
+
+An actual model API call represents a request that was not served from cache.
+
+---
+
+## Disk Cache
+
+The Image Inspector and OCR outputs can be cached on disk.
+
+Cache keys include:
+
+- image SHA-256;
+- tool name;
+- tool version;
+- relevant tool inputs;
+- OCR configuration hash where applicable.
+
+The Verification Reasoner is intentionally executed on every run so that the final decision is generated from the current evidence and reasoning configuration.
+
+Default cache location:
+
+```text
+outputs/cache/
+├── image_inspector/
+└── ocr_tool/
+```
+
+Cache files are local runtime artifacts and are not committed to Git.
+
+### Representative Cache Benchmark
+
+The following result came from a local run of `sample_004`.
+
+| Metric | Cached | Cache disabled |
+|---|---:|---:|
+| Cache hits | 2 | 0 |
+| Logical model path calls | 3 | 3 |
+| Actual model API calls | 1 | 3 |
+| Total latency | 4.943 s | 42.810 s |
+
+For this representative run:
+
+- two model calls were avoided;
+- actual model calls decreased from 3 to 1;
+- total latency improved by approximately 8.66×;
+- total latency decreased by approximately 88.5%.
+
+Latency depends on network conditions and model response time, so these values should be treated as an example rather than a guaranteed benchmark.
+
+---
+
 ## Evaluation Dataset
 
-The current evaluation set contains:
+The current functional evaluation set contains:
 
 - 5 images;
 - 21 manually designed claims;
@@ -235,9 +427,21 @@ The current evaluation set contains:
 - 7 refuted claims;
 - 5 insufficient claims.
 
-The images cover street scenes, food, utensils, printed text, rotated text, spatial relations, and outdoor actions.
+The claims exercise:
 
-### Categories
+- direct visual confirmation;
+- direct visual contradiction;
+- exact text verification;
+- punctuation normalization;
+- rotated-text recognition;
+- visual attributes;
+- object recognition;
+- spatial relationships;
+- visible actions;
+- ambiguous evidence;
+- non-visible historical facts.
+
+### Evaluation Categories
 
 | Category | Examples |
 |---|---:|
@@ -253,16 +457,9 @@ The images cover street scenes, food, utensils, printed text, rotated text, spat
 | visual_action | 1 |
 | **Total** | **21** |
 
-The dataset includes claims requiring:
+This is a small, curated functional evaluation set. It is intended to test system behavior and failure handling. It is not a generalization benchmark and should not be interpreted as evidence of production-level accuracy.
 
-- direct visual confirmation;
-- visual contradiction;
-- exact text verification;
-- OCR normalization;
-- rotated-text recognition;
-- spatial reasoning;
-- recognition of insufficient evidence;
-- rejection of unsupported identity or historical assumptions.
+---
 
 ## Evaluation Results
 
@@ -296,390 +493,473 @@ The dataset includes claims requiring:
 | Unnecessary OCR rate | 0.000 |
 | Missed OCR rate | 0.000 |
 
-Five of the 21 claims required OCR:
+Five of the 21 examples require OCR:
 
 ```text
 5 / 21 = 0.238
 ```
 
-The router invoked OCR for exactly those five examples.
+The router invoked OCR for those five examples.
 
 ### Tool-Use Efficiency
 
 | Metric | Result |
 |---|---:|
 | Average tool calls | 3.238 |
-| Average model calls | 2.238 |
+| Average logical model calls | 2.238 |
 | Optimal tool-path rate | 1.000 |
 | Average extra tool calls | 0.000 |
 | Average missing tool calls | 0.000 |
 
-For 16 visual-only claims, the system used three tools:
+Visual-only claims use:
 
 ```text
 tool_router
-image_inspector
-verification_reasoner
+→ image_inspector
+→ verification_reasoner
 ```
 
-For five text-dependent claims, it used four tools:
+Text-dependent claims use:
 
 ```text
 tool_router
-image_inspector
-ocr_tool
-verification_reasoner
+→ image_inspector
+→ ocr_tool
+→ verification_reasoner
 ```
 
-Therefore:
+The evaluator reports logical tool-path efficiency. Runtime cache metrics separately report actual API calls.
 
-```text
-Average tool calls
-= (16 × 3 + 5 × 4) / 21
-= 3.238
-```
+---
 
-The router itself is deterministic and does not require a model call:
+## OCR Ablation
 
-```text
-Average model calls
-= (16 × 2 + 5 × 3) / 21
-= 2.238
-```
+A targeted two-example OCR ablation compared single-view blind OCR with multi-view blind OCR.
 
-## OCR Failure Analysis
+| Configuration | Verification accuracy | Exact transcription |
+|---|---:|---:|
+| Blind single-view OCR | 0 / 2 | 0.000 |
+| Blind multi-view OCR | 2 / 2 | 1.000 |
 
-A difficult example contained small, curved, rotated text printed on the rim of a bowl.
+The result demonstrates the value of crop, rotation, upscale, and contrast-enhanced views for the selected difficult examples.
 
-The ground-truth text was:
+This is a small targeted ablation, not a large-scale OCR benchmark.
 
-```text
-MADAM MAM'S
-```
-
-### Claim-Conditioned OCR Failure
-
-An early OCR implementation received both the image and the target phrase.
-
-On the same physical text region, different runs produced inconsistent outputs such as:
-
-```text
-SIAM VILLAGE
-SIAM I WOK
-```
-
-This exposed a potential target-leakage failure:
-
-> When the OCR model knows the phrase being tested, ambiguous visual evidence can be completed toward that phrase.
-
-These early runs are treated as qualitative observations rather than formal ablation results because the original annotation was later corrected.
-
-### Blind Single-View OCR
-
-The OCR model was then separated from the claim and received only the original image.
-
-It produced:
-
-```text
-JIMMY WONG'S
-SIAM INN TOO
-```
-
-The system correctly recognized that the evidence was ambiguous and returned `insufficient`, but both formal verification examples were incorrect.
-
-### Multi-View Blind OCR
-
-The final method used:
-
-- the complete image;
-- an enlarged crop;
-- a 90-degree rotation;
-- a 270-degree rotation;
-- a high-contrast rotated crop.
-
-It independently transcribed:
-
-```text
-MADAM MAM'S
-```
-
-under both the supported and refuted claims.
-
-## OCR Ablation Experiment
-
-| Method | Views | Verification Accuracy | OCR Transcription Accuracy | Consistent Across Claims | Average OCR Confidence |
-|---|---:|---:|---:|---:|---:|
-| Blind Single-View OCR | 1 | 0.000 | 0.000 | No | 0.785 |
-| Multi-View Blind OCR | 5 | 1.000 | 1.000 | Yes | 0.950 |
-
-Average verification confidence also increased:
-
-```text
-0.790 → 0.975
-```
-
-The complete experiment report is available at:
-
-```text
-experiments/ocr_ablation_summary.md
-```
-
-The structured experiment data is stored at:
+Detailed outputs are stored in:
 
 ```text
 experiments/ocr_ablation.json
+experiments/ocr_ablation_summary.md
 ```
 
-Run the analysis with:
+---
+
+## Quick Start
+
+### Requirements
+
+- Python 3.9
+- An OpenAI API key
+
+### Clone the Repository
 
 ```bash
-python experiments/analyze_ablation.py
+git clone https://github.com/qzeng16/multimodal-evidence-agent.git
+cd multimodal-evidence-agent
 ```
 
-## Evidence Ambiguity Example
-
-One original claim stated:
-
-```text
-The food is topped with orange fish and a pale sauce.
-```
-
-The image clearly established:
-
-- an orange topping;
-- a pale sauce.
-
-However, the image alone could not strictly establish that the orange topping was fish.
-
-The verifier returned:
-
-```text
-insufficient
-```
-
-The annotation was revised from `supported` to `insufficient`.
-
-This example demonstrates the intended evidence standard:
-
-> Visual resemblance should not automatically be treated as confirmed identity.
-
-## Repository Structure
-
-```text
-multimodal-evidence-agent/
-├── main.py
-├── test_router.py
-├── requirements.txt
-├── download_selected_openimages.py
-├── data/
-│   ├── samples.jsonl
-│   ├── ocr_regions.json
-│   └── images/
-│       ├── sample_001.png
-│       └── openimages/
-├── experiments/
-│   ├── analyze_ablation.py
-│   ├── ocr_ablation.json
-│   └── ocr_ablation_summary.md
-├── outputs/
-│   ├── predictions.jsonl
-│   └── metrics.json
-└── src/
-    ├── schemas.py
-    ├── image_loader.py
-    ├── image_inspector.py
-    ├── tool_router.py
-    ├── ocr_tool.py
-    ├── verifier.py
-    └── evaluator.py
-```
-
-## Installation
-
-Create and activate a virtual environment:
+### Create a Virtual Environment
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-Install dependencies:
+### Install Runtime Dependencies
 
 ```bash
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-Create a `.env` file in the project root:
+### Configure the API Key
 
-```text
-OPENAI_API_KEY=your_api_key_here
+Create a local `.env` file:
+
+```bash
+cat > .env <<'ENVEOF'
+OPENAI_API_KEY=your-api-key-here
+ENVEOF
 ```
 
-The `.env` file is excluded from Git.
+Do not commit `.env` or expose the API key in logs.
 
-## Usage
+---
 
-### Run the complete evaluation set
+## Command-Line Usage
+
+### Run One Example
+
+```bash
+python main.py --example-id sample_004
+```
+
+### Run One Example Without Cache
+
+```bash
+python main.py \
+  --example-id sample_004 \
+  --no-cache
+```
+
+This is useful when measuring uncached latency.
+
+### Run the Full Evaluation Set
 
 ```bash
 python main.py
 ```
 
-### Run one example
+Running the full set may make multiple model API calls and may incur API costs.
 
-```bash
-python main.py --example-id sample_012
-```
-
-### Show command-line help
+### View CLI Help
 
 ```bash
 python main.py --help
 ```
 
-### Test the deterministic router
+---
+
+## FastAPI Service
+
+Start the development server:
 
 ```bash
-python test_router.py
+python -m uvicorn app:app --reload
 ```
 
-### Run the OCR ablation analysis
+Available documentation:
+
+```text
+http://127.0.0.1:8000/docs
+http://127.0.0.1:8000/redoc
+```
+
+### Health Check
 
 ```bash
-python experiments/analyze_ablation.py
+curl -s \
+  http://127.0.0.1:8000/health \
+  | python -m json.tool
 ```
 
-## Saved Outputs
+### Verify a Dataset Example
 
-Predictions are written to:
+```bash
+curl -s -X POST \
+  "http://127.0.0.1:8000/verify-example/sample_004?use_cache=true" \
+  | python -m json.tool
+```
+
+### Verify a Custom Claim
+
+The image must be located inside `data/images`.
+
+```bash
+curl -s -X POST \
+  http://127.0.0.1:8000/verify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image_path": "data/images/sample_001.png",
+    "claim": "The street sign says \"28th St.\"",
+    "context": "The claim refers to the large blue street sign near the upper-left traffic light.",
+    "use_cache": true
+  }' \
+  | python -m json.tool
+```
+
+A response includes:
+
+```json
+{
+  "example_id": "api_request",
+  "label": "supported",
+  "confidence": 0.99,
+  "rationale": "The sign displays the claimed text.",
+  "cache_enabled": true,
+  "cache_hits": 2,
+  "cache_misses": 0,
+  "cache_hit_rate": 1.0,
+  "logical_model_call_count": 3,
+  "actual_model_call_count": 1
+}
+```
+
+The complete response also contains selected evidence, routing information, the tool trace, and latency metrics.
+
+---
+
+## Run Artifacts
+
+Each CLI execution creates an isolated directory under:
 
 ```text
-outputs/predictions.jsonl
+outputs/runs/
 ```
 
-Metrics are written to:
+Example:
 
 ```text
-outputs/metrics.json
+outputs/runs/
+└── 20260805T014254Z_sample_004_6c53945b/
+    ├── predictions.jsonl
+    ├── metrics.json
+    └── run_manifest.json
 ```
 
-Each prediction record includes:
+### `predictions.jsonl`
 
-- claim and image information;
-- gold and predicted labels;
+Contains one record per evaluated example, including:
+
+- claim;
+- predicted label;
 - confidence;
-- route correctness;
-- OCR decision;
-- tool names;
-- tool-call count;
-- model-call count;
+- rationale;
 - selected evidence;
-- complete tool trace.
+- routing decision;
+- tool trace.
 
-Note: running a single example currently overwrites the saved prediction and metrics files with that single-example result.
+### `metrics.json`
 
-## Design Decisions
+Contains dataset-level metrics for:
 
-### Why Use Three Labels?
+- classification;
+- per-label accuracy;
+- per-category accuracy;
+- confusion matrix;
+- OCR routing;
+- tool-use efficiency.
 
-Binary supported/refuted classification encourages systems to guess when evidence is missing.
+### `run_manifest.json`
 
-The `insufficient` label explicitly represents:
+Records execution metadata such as:
 
-- unreadable text;
-- ambiguous object identity;
-- unsupported dates;
-- unknown locations;
-- unknown preparation time;
-- historical facts not visible in the image;
-- conflicts between uncertain perception tools.
-
-### Why Use Deterministic Text Matching?
-
-A language model should not decide whether:
-
-```text
-28th St.
+```json
+{
+  "run_id": "20260805T014254Z_sample_004_6c53945b",
+  "metadata": {
+    "dataset_path": "data/samples.jsonl",
+    "example_id_filter": "sample_004",
+    "cache_enabled": true,
+    "evaluated_examples": 1,
+    "accuracy": 1.0,
+    "runtime": {
+      "execution_count": 1,
+      "cache_hits": 2,
+      "cache_misses": 0,
+      "logical_model_calls": 3,
+      "actual_model_calls": 1,
+      "model_calls_avoided": 2
+    }
+  }
+}
 ```
 
-matches:
+Run directories are local experiment artifacts and are ignored by Git.
 
-```text
-28th St
+---
+
+## Testing
+
+Install development dependencies:
+
+```bash
+python -m pip install -r requirements-dev.txt
 ```
 
-A deterministic matcher makes this comparison:
+Run the complete test suite:
 
-- reproducible;
-- inspectable;
-- independent of model variation;
-- easier to test.
-
-### Why Keep OCR Blind?
-
-Claim-conditioned OCR can create confirmation bias.
-
-Blind OCR separates:
-
-```text
-What text is visible?
+```bash
+python -m pytest
 ```
 
-from:
+Run tests with detailed names:
 
-```text
-Does that text support the claim?
+```bash
+python -m pytest -v
 ```
 
-This separation produces a clearer and more auditable agent pipeline.
+The current suite contains 38 tests covering:
 
-## Limitations
+- dataset loading and validation;
+- example selection;
+- deterministic tool routing;
+- OCR target extraction;
+- cache key stability;
+- cache read and write behavior;
+- corrupted cache recovery;
+- file hashing;
+- API route registration;
+- health metadata;
+- image path security;
+- run directory creation;
+- JSON and JSONL artifact writing;
+- manifest generation.
 
-The current results should be interpreted as a functional evaluation, not as proof of broad generalization.
+The tests do not call the OpenAI API.
 
-Current limitations include:
+---
 
-- only five images;
-- 21 manually curated claims;
-- one focused rotated-text ablation;
-- manually configured crop coordinates for the difficult OCR region;
-- no large-scale public benchmark evaluation;
-- no automated text-region detector;
-- no repeated-run robustness statistics;
-- no latency or API-cost evaluation;
-- model outputs may vary across repeated executions;
-- the general Image Inspector still receives the claim and can exhibit confirmation bias.
+## Continuous Integration
 
-The 1.000 evaluation accuracy therefore describes this small curated dataset only.
+GitHub Actions runs the test suite on:
 
-## Future Work
+- pushes to `main`;
+- pull requests.
 
-Planned extensions include:
-
-1. Automatic text-region proposal and crop selection.
-2. Multiple OCR regions per image.
-3. Repeated-run stability evaluation.
-4. Confidence calibration.
-5. Latency and API-cost tracking.
-6. OCR caching across claims sharing the same image.
-7. Larger public multimodal verification benchmarks.
-8. Automatic selection between original, rotated, and enhanced views.
-9. Additional tools for metadata and external evidence retrieval.
-10. A lightweight API or web interface.
-
-## Main Takeaway
-
-This project demonstrates that reliable multimodal verification requires more than asking one model to inspect an image and answer a question.
-
-A more robust pipeline separates:
+Workflow file:
 
 ```text
-routing
-perception
-OCR
-deterministic comparison
-verification
-evaluation
+.github/workflows/tests.yml
 ```
 
-The rotated-text failure case shows how claim-conditioned perception can become unstable, while multi-view blind OCR and deterministic matching provide a more reliable and auditable alternative.
+The CI environment:
+
+1. checks out the repository;
+2. installs Python 3.9;
+3. installs development dependencies;
+4. runs `python -m pytest`.
+
+---
+
+## Project Structure
+
+```text
+multimodal-evidence-agent/
+├── app.py
+├── main.py
+├── requirements.txt
+├── requirements-dev.txt
+├── pytest.ini
+├── README.md
+│
+├── data/
+│   ├── images/
+│   ├── ocr_regions.json
+│   └── samples.jsonl
+│
+├── experiments/
+│   ├── analyze_ablation.py
+│   ├── ocr_ablation.json
+│   └── ocr_ablation_summary.md
+│
+├── src/
+│   ├── cache.py
+│   ├── dataset.py
+│   ├── evaluator.py
+│   ├── image_inspector.py
+│   ├── image_loader.py
+│   ├── ocr_tool.py
+│   ├── pipeline.py
+│   ├── run_artifacts.py
+│   ├── schemas.py
+│   ├── tool_router.py
+│   └── verifier.py
+│
+├── tests/
+│   ├── test_app.py
+│   ├── test_cache.py
+│   ├── test_dataset.py
+│   ├── test_run_artifacts.py
+│   └── test_tool_router.py
+│
+├── outputs/
+│   ├── cache/
+│   └── runs/
+│
+└── .github/
+    └── workflows/
+        └── tests.yml
+```
+
+---
+
+## Security and Data Handling
+
+The API restricts local image access to files inside:
+
+```text
+data/images/
+```
+
+This prevents API requests from reading arbitrary local files.
+
+Additional safeguards:
+
+- API keys are loaded from environment variables;
+- `.env` is excluded from Git;
+- runtime cache files are excluded from Git;
+- run artifacts are excluded from Git;
+- custom remote image URLs are not fetched by the API.
+
+This project is a research and portfolio prototype and has not undergone a production security audit.
+
+---
+
+## Current Limitations
+
+- The evaluation set is small and manually curated.
+- Difficult OCR regions currently rely on configured crops.
+- Performance depends on the underlying multimodal model.
+- Confidence values are model-generated and are not formally calibrated.
+- The cache uses the local filesystem rather than a distributed store.
+- The system does not retrieve external textual evidence.
+- The API processes local project images rather than uploaded files.
+- There is no browser-based user interface.
+- The current evaluation does not measure robustness to large distribution shifts.
+
+---
+
+## Possible Extensions
+
+- Larger and more diverse evaluation datasets
+- Automatic text-region detection
+- Learned or model-assisted tool routing
+- Confidence calibration
+- Adversarial and counterfactual test cases
+- Uploaded-image API support
+- Async batch processing
+- Docker packaging
+- Cloud deployment
+- Human review for low-confidence outputs
+- External evidence retrieval
+- Multimodal retrieval-augmented verification
+
+---
+
+## Design Principles
+
+The implementation follows five core principles:
+
+1. **Route tools intentionally.**  
+   Expensive tools should only be used when they are relevant.
+
+2. **Separate perception from verification.**  
+   A perception model should describe evidence rather than decide the final answer immediately.
+
+3. **Reduce confirmation bias.**  
+   OCR should transcribe independently before target matching occurs.
+
+4. **Treat uncertainty as a valid result.**  
+   Missing or ambiguous evidence should not be forced into support or contradiction.
+
+5. **Make experiments reproducible.**  
+   Tool traces, metrics, cache statistics, and run manifests should be preserved.
+
+---
+
+## Repository
+
+```text
+https://github.com/qzeng16/multimodal-evidence-agent
+```
