@@ -1,0 +1,78 @@
+name: Docker Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-build:
+    name: Build and smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: multimodal-evidence-agent:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start container
+        run: |
+          docker run \
+            --detach \
+            --name multimodal-evidence-agent-ci \
+            --env OPENAI_API_KEY=sk-ci-placeholder \
+            --publish 8000:8000 \
+            multimodal-evidence-agent:ci
+
+      - name: Check health endpoint
+        run: |
+          for attempt in {1..30}; do
+            if curl \
+              --fail \
+              --silent \
+              http://127.0.0.1:8000/health \
+              > health.json
+            then
+              echo "Container health check passed."
+              cat health.json
+              exit 0
+            fi
+
+            echo "Waiting for container: attempt ${attempt}/30"
+            sleep 2
+          done
+
+          echo "Container failed to become ready."
+          docker logs multimodal-evidence-agent-ci
+          exit 1
+
+      - name: Show container logs
+        if: always()
+        run: |
+          docker logs multimodal-evidence-agent-ci || true
+
+      - name: Remove container
+        if: always()
+        run: |
+          docker rm \
+            --force \
+            multimodal-evidence-agent-ci \
+            || true
