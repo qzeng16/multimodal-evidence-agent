@@ -17,6 +17,11 @@ from src.pipeline import (
     PipelineExecution,
     run_verification,
 )
+from src.run_artifacts import (
+    create_run_artifacts,
+    write_run_manifest,
+)
+
 from src.schemas import (
     OCRExtraction,
     ToolRoutingDecision,
@@ -653,6 +658,21 @@ def main() -> None:
 
     arguments = parse_arguments()
 
+    run_artifacts = create_run_artifacts(
+        run_name=(
+            arguments.example_id
+            or "full-dataset"
+        )
+    )
+
+    PREDICTIONS_PATH = (
+        run_artifacts.predictions_path
+    )
+
+    METRICS_PATH = (
+        run_artifacts.metrics_path
+    )
+
     use_cache = not arguments.no_cache
 
     all_examples = load_examples(
@@ -726,6 +746,90 @@ def main() -> None:
         executions
     )
 
+    total_cache_hits = sum(
+        execution.cache_hits
+        for execution in executions
+    )
+
+    total_cache_misses = sum(
+        execution.cache_misses
+        for execution in executions
+    )
+
+    total_actual_model_calls = sum(
+        execution.model_call_count
+        for execution in executions
+    )
+
+    total_logical_model_calls = sum(
+        count_logical_model_calls(
+            execution
+        )
+        for execution in executions
+    )
+
+    total_latency_seconds = sum(
+        execution.latency.total_seconds
+        for execution in executions
+    )
+
+    write_run_manifest(
+        artifacts=run_artifacts,
+        metadata={
+            "dataset_path": str(DATA_PATH),
+            "example_id_filter": (
+                arguments.example_id
+            ),
+            "cache_enabled": (
+                not arguments.no_cache
+            ),
+            "evaluated_examples": metrics.get(
+                "evaluated_examples",
+                0,
+            ),
+            "accuracy": metrics.get(
+                "accuracy"
+            ),
+            "runtime": {
+                "execution_count": len(
+                    executions
+                ),
+                "cache_hits": (
+                    total_cache_hits
+                ),
+                "cache_misses": (
+                    total_cache_misses
+                ),
+                "logical_model_calls": (
+                    total_logical_model_calls
+                ),
+                "actual_model_calls": (
+                    total_actual_model_calls
+                ),
+                "model_calls_avoided": max(
+                    total_logical_model_calls
+                    - total_actual_model_calls,
+                    0,
+                ),
+                "total_latency_seconds": (
+                    total_latency_seconds
+                ),
+            },
+        },
+    )
+
+    print("\nRun artifacts:")
+
+    print(
+        f"- Run ID: "
+        f"{run_artifacts.run_id}"
+    )
+
+    print(
+        f"- Directory: "
+        f"{run_artifacts.run_directory}"
+    )
+
     print("\nSaved files:")
 
     print(
@@ -734,6 +838,10 @@ def main() -> None:
 
     print(
         f"- {METRICS_PATH}"
+    )
+
+    print(
+        f"- {run_artifacts.manifest_path}"
     )
 
 
