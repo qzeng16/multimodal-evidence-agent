@@ -1,8 +1,17 @@
+import os
+import secrets
 from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from dotenv import load_dotenv
+from fastapi import (
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    status,
+)
 from pydantic import BaseModel, Field
 
 from src.dataset import (
@@ -23,6 +32,9 @@ from src.schemas import (
 )
 
 
+load_dotenv()
+
+
 PROJECT_ROOT = Path(
     __file__
 ).resolve().parent
@@ -38,6 +50,10 @@ ALLOWED_IMAGE_ROOT = (
     / "data"
     / "images"
 ).resolve()
+
+SERVICE_API_KEY_ENV = (
+    "SERVICE_API_KEY"
+)
 
 MODEL_TOOL_NAMES = {
     "image_inspector",
@@ -127,6 +143,58 @@ class VerificationResponse(BaseModel):
     model_call_count: int = Field(
         ge=0
     )
+
+
+def get_service_api_key() -> Optional[str]:
+    """Return the configured API key, if authentication is enabled."""
+
+    configured_key = os.getenv(
+        SERVICE_API_KEY_ENV
+    )
+
+    if configured_key is None:
+        return None
+
+    configured_key = configured_key.strip()
+
+    return configured_key or None
+
+
+def require_service_api_key(
+    x_api_key: Optional[str] = Header(
+        default=None,
+        alias="X-API-Key",
+        description=(
+            "Service access key required when "
+            "SERVICE_API_KEY is configured."
+        ),
+    ),
+) -> None:
+    """Require a valid service API key when one is configured."""
+
+    expected_key = get_service_api_key()
+
+    if expected_key is None:
+        return
+
+    if (
+        x_api_key is None
+        or not secrets.compare_digest(
+            x_api_key,
+            expected_key,
+        )
+    ):
+        raise HTTPException(
+            status_code=(
+                status.HTTP_401_UNAUTHORIZED
+            ),
+            detail=(
+                "Invalid or missing API key."
+            ),
+            headers={
+                "WWW-Authenticate": "ApiKey"
+            },
+        )
 
 
 def calculate_cache_hit_rate(
@@ -324,6 +392,10 @@ def health() -> dict:
         ),
         "version": "1.1.0",
         "disk_cache_supported": True,
+        "api_key_authentication_enabled": (
+            get_service_api_key()
+            is not None
+        ),
     }
 
 
@@ -331,6 +403,11 @@ def health() -> dict:
     "/verify",
     response_model=VerificationResponse,
     tags=["verification"],
+    dependencies=[
+        Depends(
+            require_service_api_key
+        )
+    ],
 )
 def verify(
     request: VerificationRequest,
@@ -378,6 +455,11 @@ def verify(
     "/verify-example/{example_id}",
     response_model=VerificationResponse,
     tags=["verification"],
+    dependencies=[
+        Depends(
+            require_service_api_key
+        )
+    ],
 )
 def verify_example(
     example_id: str,
