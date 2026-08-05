@@ -12,9 +12,11 @@ from fastapi import (
     HTTPException,
     status,
 )
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.demo_routes import router as demo_router
+from src.demo_page_routes import router as demo_page_router
 
 from src.dataset import (
     find_example_by_id,
@@ -529,4 +531,15 @@ def verify_example(
     )
 
 
+app.mount(
+    "/demo-images",
+    StaticFiles(
+        directory=str(
+            ALLOWED_IMAGE_ROOT
+        )
+    ),
+    name="demo-images",
+)
+
 app.include_router(demo_router)
+app.include_router(demo_page_router)
