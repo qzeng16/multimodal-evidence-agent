@@ -1,0 +1,576 @@
+[
+  {
+    "example_id": "sample_001",
+    "claim": "The traffic light in the image is red.",
+    "image_path": "data/images/sample_001.png",
+    "context": "The image shows a street intersection.",
+    "category": "visual_state",
+    "gold_label": "supported",
+    "expected_use_ocr": false,
+    "predicted_label": "supported",
+    "confidence": 0.99,
+    "correct": true,
+    "predicted_use_ocr": false,
+    "route_correct": true,
+    "optimal_tool_path": true,
+    "tool_names": [
+      "tool_router",
+      "image_inspector",
+      "verification_reasoner"
+    ],
+    "tool_call_count": 3,
+    "model_call_count": 2,
+    "routing_decision": {
+      "use_image_inspector": true,
+      "use_ocr": false,
+      "reasoning": "The claim concerns visual properties rather than readable text. The Image Inspector is sufficient, so OCR is not required.",
+      "matched_keywords": [],
+      "text_targets": []
+    },
+    "rationale": "The prominent overhead traffic light is clearly described as displaying an illuminated red signal, with other visible signals also appearing red.",
+    "evidence": [
+      {
+        "modality": "visual",
+        "content": "The closest overhead traffic light has a bright red top light illuminated.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "visual",
+        "content": "Several additional traffic signals across the intersection also show red.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "visual",
+        "content": "Vehicles in the foreground appear stopped.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      }
+    ],
+    "tool_trace": [
+      {
+        "tool_name": "tool_router",
+        "tool_input": {
+          "claim": "The traffic light in the image is red."
+        },
+        "tool_output_summary": "use_image_inspector=True; use_ocr=False; The claim concerns visual properties rather than readable text. The Image Inspector is sufficient, so OCR is not required."
+      },
+      {
+        "tool_name": "image_inspector",
+        "tool_input": {
+          "image_path": "data/images/sample_001.png",
+          "claim": "The traffic light in the image is red.",
+          "context": "The image shows a street intersection."
+        },
+        "tool_output_summary": "A street intersection with multiple vehicle traffic signals visible. The prominent overhead signal near the upper left has its top red light illuminated."
+      },
+      {
+        "tool_name": "verification_reasoner",
+        "tool_input": {
+          "claim": "The traffic light in the image is red.",
+          "used_ocr": false,
+          "visual_observation_count": 3,
+          "ocr_observation_count": 0
+        },
+        "tool_output_summary": "Label: supported; confidence: 0.99"
+      }
+    ]
+  },
+  {
+    "example_id": "sample_002",
+    "claim": "The traffic light in the image is green.",
+    "image_path": "data/images/sample_001.png",
+    "context": "The image shows a street intersection.",
+    "category": "visual_state",
+    "gold_label": "refuted",
+    "expected_use_ocr": false,
+    "predicted_label": "refuted",
+    "confidence": 0.96,
+    "correct": true,
+    "predicted_use_ocr": false,
+    "route_correct": true,
+    "optimal_tool_path": true,
+    "tool_names": [
+      "tool_router",
+      "image_inspector",
+      "verification_reasoner"
+    ],
+    "tool_call_count": 3,
+    "model_call_count": 2,
+    "routing_decision": {
+      "use_image_inspector": true,
+      "use_ocr": false,
+      "reasoning": "The claim concerns visual properties rather than readable text. The Image Inspector is sufficient, so OCR is not required.",
+      "matched_keywords": [],
+      "text_targets": []
+    },
+    "rationale": "The clearly visible traffic lights facing the camera are illuminated red, not green. Although the claim does not specify a particular signal, no visible signal is shown with an illuminated green lamp.",
+    "evidence": [
+      {
+        "modality": "visual",
+        "content": "The prominent overhead signal near the upper left has its red top lamp illuminated.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "visual",
+        "content": "Multiple other visible signals across the intersection also display red lamps.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "visual",
+        "content": "No visible traffic signal has an illuminated green lamp.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "visual",
+        "content": "Some distant or side-facing signals are partially obscured or less certain.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      }
+    ],
+    "tool_trace": [
+      {
+        "tool_name": "tool_router",
+        "tool_input": {
+          "claim": "The traffic light in the image is green."
+        },
+        "tool_output_summary": "use_image_inspector=True; use_ocr=False; The claim concerns visual properties rather than readable text. The Image Inspector is sufficient, so OCR is not required."
+      },
+      {
+        "tool_name": "image_inspector",
+        "tool_input": {
+          "image_path": "data/images/sample_001.png",
+          "claim": "The traffic light in the image is green.",
+          "context": "The image shows a street intersection."
+        },
+        "tool_output_summary": "A street intersection with several visible traffic signals. The prominent overhead signal near the upper left has its red lamp illuminated."
+      },
+      {
+        "tool_name": "verification_reasoner",
+        "tool_input": {
+          "claim": "The traffic light in the image is green.",
+          "used_ocr": false,
+          "visual_observation_count": 4,
+          "ocr_observation_count": 0
+        },
+        "tool_output_summary": "Label: refuted; confidence: 0.96"
+      }
+    ]
+  },
+  {
+    "example_id": "sample_003",
+    "claim": "The traffic light was installed in 2024.",
+    "image_path": "data/images/sample_001.png",
+    "context": "The image shows a street intersection.",
+    "category": "non_visible_fact",
+    "gold_label": "insufficient",
+    "expected_use_ocr": true,
+    "predicted_label": "insufficient",
+    "confidence": 0.99,
+    "correct": true,
+    "predicted_use_ocr": true,
+    "route_correct": true,
+    "optimal_tool_path": true,
+    "tool_names": [
+      "tool_router",
+      "image_inspector",
+      "ocr_tool",
+      "verification_reasoner"
+    ],
+    "tool_call_count": 4,
+    "model_call_count": 3,
+    "routing_decision": {
+      "use_image_inspector": true,
+      "use_ocr": true,
+      "reasoning": "The claim depends on visible text, numbers, signage, labels, dates, or written information. The system should use both the Image Inspector and the OCR tool.",
+      "matched_keywords": [],
+      "text_targets": [
+        "2024"
+      ]
+    },
+    "rationale": "The evidence shows traffic lights at the intersection but does not establish when they were installed. No readable date, plaque, timestamp, or construction notice identifies 2024 as the installation year, and the absence of “2024” in OCR does not refute the claim.",
+    "evidence": [
+      {
+        "modality": "visual",
+        "content": "Multiple installed and operating traffic lights are visible.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "visual",
+        "content": "No installation date is visibly displayed on the traffic lights or nearby hardware.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "visual",
+        "content": "The specific traffic light referenced is ambiguous.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "ocr",
+        "content": "OCR did not detect the target text “2024.”",
+        "source": "ocr_tool",
+        "relevance": 1.0
+      },
+      {
+        "modality": "ocr",
+        "content": "Detected text includes street signs, a leasing banner, vehicle badges, and license plates, none of which provides an installation year.",
+        "source": "ocr_tool",
+        "relevance": 1.0
+      },
+      {
+        "modality": "ocr",
+        "content": "Some smaller or distant text is unreadable.",
+        "source": "ocr_tool",
+        "relevance": 1.0
+      }
+    ],
+    "tool_trace": [
+      {
+        "tool_name": "tool_router",
+        "tool_input": {
+          "claim": "The traffic light was installed in 2024."
+        },
+        "tool_output_summary": "use_image_inspector=True; use_ocr=True; The claim depends on visible text, numbers, signage, labels, dates, or written information. The system should use both the Image Inspector and the OCR tool."
+      },
+      {
+        "tool_name": "image_inspector",
+        "tool_input": {
+          "image_path": "data/images/sample_001.png",
+          "claim": "The traffic light was installed in 2024.",
+          "context": "The image shows a street intersection."
+        },
+        "tool_output_summary": "A street intersection with multiple mounted traffic signals; several signals are showing red. No installation date is visibly displayed on the traffic lights or nearby hardware."
+      },
+      {
+        "tool_name": "ocr_tool",
+        "tool_input": {
+          "image_path": "data/images/sample_001.png",
+          "claim": "The traffic light was installed in 2024.",
+          "text_targets": [
+            "2024"
+          ]
+        },
+        "tool_output_summary": "Detected 7 text span(s); 0 target match(es); 1 target mismatch(es)."
+      },
+      {
+        "tool_name": "verification_reasoner",
+        "tool_input": {
+          "claim": "The traffic light was installed in 2024.",
+          "used_ocr": true,
+          "visual_observation_count": 3,
+          "ocr_observation_count": 3
+        },
+        "tool_output_summary": "Label: insufficient; confidence: 0.99"
+      }
+    ]
+  },
+  {
+    "example_id": "sample_004",
+    "claim": "The street sign says \"28th St.\"",
+    "image_path": "data/images/sample_001.png",
+    "context": "The claim refers to the large blue street sign near the upper-left traffic light.",
+    "category": "visible_text",
+    "gold_label": "supported",
+    "expected_use_ocr": true,
+    "predicted_label": "supported",
+    "confidence": 0.99,
+    "correct": true,
+    "predicted_use_ocr": true,
+    "route_correct": true,
+    "optimal_tool_path": true,
+    "tool_names": [
+      "tool_router",
+      "image_inspector",
+      "ocr_tool",
+      "verification_reasoner"
+    ],
+    "tool_call_count": 4,
+    "model_call_count": 3,
+    "routing_decision": {
+      "use_image_inspector": true,
+      "use_ocr": true,
+      "reasoning": "The claim depends on visible text, numbers, signage, labels, dates, or written information. The system should use both the Image Inspector and the OCR tool.",
+      "matched_keywords": [
+        "sign",
+        "says"
+      ],
+      "text_targets": [
+        "28th St."
+      ]
+    },
+    "rationale": "The specified blue street sign clearly reads “28th St.” OCR independently detects “28th St” at that location, matching the claim after punctuation normalization.",
+    "evidence": [
+      {
+        "modality": "visual",
+        "content": "The large blue sign near the upper-left traffic light has the readable top line “28th St.”",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "visual",
+        "content": "The relevant sign is clear and unobstructed.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "ocr",
+        "content": "OCR detected “28th St” on the blue street sign with 0.99 confidence as part of “28th St / 2800 W.”",
+        "source": "ocr_tool",
+        "relevance": 1.0
+      },
+      {
+        "modality": "ocr",
+        "content": "The target “28th St.” matches the detected text “28th St” after normalization.",
+        "source": "ocr_tool",
+        "relevance": 1.0
+      }
+    ],
+    "tool_trace": [
+      {
+        "tool_name": "tool_router",
+        "tool_input": {
+          "claim": "The street sign says \"28th St.\""
+        },
+        "tool_output_summary": "use_image_inspector=True; use_ocr=True; The claim depends on visible text, numbers, signage, labels, dates, or written information. The system should use both the Image Inspector and the OCR tool."
+      },
+      {
+        "tool_name": "image_inspector",
+        "tool_input": {
+          "image_path": "data/images/sample_001.png",
+          "claim": "The street sign says \"28th St.\"",
+          "context": "The claim refers to the large blue street sign near the upper-left traffic light."
+        },
+        "tool_output_summary": "A city intersection with multiple red traffic lights. Near the upper-left traffic light, a large blue street sign is clearly visible."
+      },
+      {
+        "tool_name": "ocr_tool",
+        "tool_input": {
+          "image_path": "data/images/sample_001.png",
+          "claim": "The street sign says \"28th St.\"",
+          "text_targets": [
+            "28th St."
+          ]
+        },
+        "tool_output_summary": "Detected 8 text span(s); 1 target match(es); 0 target mismatch(es)."
+      },
+      {
+        "tool_name": "verification_reasoner",
+        "tool_input": {
+          "claim": "The street sign says \"28th St.\"",
+          "used_ocr": true,
+          "visual_observation_count": 2,
+          "ocr_observation_count": 2
+        },
+        "tool_output_summary": "Label: supported; confidence: 0.99"
+      }
+    ]
+  },
+  {
+    "example_id": "sample_005",
+    "claim": "The street sign says \"29th St.\"",
+    "image_path": "data/images/sample_001.png",
+    "context": "The claim refers to the large blue street sign near the upper-left traffic light.",
+    "category": "visible_text",
+    "gold_label": "refuted",
+    "expected_use_ocr": true,
+    "predicted_label": "refuted",
+    "confidence": 0.99,
+    "correct": true,
+    "predicted_use_ocr": true,
+    "route_correct": true,
+    "optimal_tool_path": true,
+    "tool_names": [
+      "tool_router",
+      "image_inspector",
+      "ocr_tool",
+      "verification_reasoner"
+    ],
+    "tool_call_count": 4,
+    "model_call_count": 3,
+    "routing_decision": {
+      "use_image_inspector": true,
+      "use_ocr": true,
+      "reasoning": "The claim depends on visible text, numbers, signage, labels, dates, or written information. The system should use both the Image Inspector and the OCR tool.",
+      "matched_keywords": [
+        "sign",
+        "says"
+      ],
+      "text_targets": [
+        "29th St."
+      ]
+    },
+    "rationale": "The specified large blue street sign clearly shows “28th St,” directly contradicting the claim that it says “29th St.”",
+    "evidence": [
+      {
+        "modality": "visual",
+        "content": "The large blue sign near the upper-left traffic light is clearly visible and reads “28th St.”",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "visual",
+        "content": "The Image Inspector reports little ambiguity in the street number.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "ocr",
+        "content": "OCR detected “28th St” and “2800 W” on the large blue street sign with 0.99 confidence.",
+        "source": "ocr_tool",
+        "relevance": 1.0
+      },
+      {
+        "modality": "ocr",
+        "content": "OCR found no match for the target text “29th St.”",
+        "source": "ocr_tool",
+        "relevance": 1.0
+      }
+    ],
+    "tool_trace": [
+      {
+        "tool_name": "tool_router",
+        "tool_input": {
+          "claim": "The street sign says \"29th St.\""
+        },
+        "tool_output_summary": "use_image_inspector=True; use_ocr=True; The claim depends on visible text, numbers, signage, labels, dates, or written information. The system should use both the Image Inspector and the OCR tool."
+      },
+      {
+        "tool_name": "image_inspector",
+        "tool_input": {
+          "image_path": "data/images/sample_001.png",
+          "claim": "The street sign says \"29th St.\"",
+          "context": "The claim refers to the large blue street sign near the upper-left traffic light."
+        },
+        "tool_output_summary": "A city intersection with a large blue street sign hanging near the upper-left traffic light."
+      },
+      {
+        "tool_name": "ocr_tool",
+        "tool_input": {
+          "image_path": "data/images/sample_001.png",
+          "claim": "The street sign says \"29th St.\"",
+          "text_targets": [
+            "29th St."
+          ]
+        },
+        "tool_output_summary": "Detected 8 text span(s); 0 target match(es); 1 target mismatch(es)."
+      },
+      {
+        "tool_name": "verification_reasoner",
+        "tool_input": {
+          "claim": "The street sign says \"29th St.\"",
+          "used_ocr": true,
+          "visual_observation_count": 2,
+          "ocr_observation_count": 2
+        },
+        "tool_output_summary": "Label: refuted; confidence: 0.99"
+      }
+    ]
+  },
+  {
+    "example_id": "sample_012",
+    "claim": "The bowl rim says \"MADAM MAM'S\".",
+    "image_path": "data/images/openimages/583a3460c32053a1.jpg",
+    "context": "The claim refers to the dark curved text printed along the left side of the bowl's blue rim.",
+    "category": "rotated_text",
+    "gold_label": "supported",
+    "expected_use_ocr": true,
+    "predicted_label": "supported",
+    "confidence": 0.98,
+    "correct": true,
+    "predicted_use_ocr": true,
+    "route_correct": true,
+    "optimal_tool_path": true,
+    "tool_names": [
+      "tool_router",
+      "image_inspector",
+      "ocr_tool",
+      "verification_reasoner"
+    ],
+    "tool_call_count": 4,
+    "model_call_count": 3,
+    "routing_decision": {
+      "use_image_inspector": true,
+      "use_ocr": true,
+      "reasoning": "The claim depends on visible text, numbers, signage, labels, dates, or written information. The system should use both the Image Inspector and the OCR tool.",
+      "matched_keywords": [
+        "says"
+      ],
+      "text_targets": [
+        "MADAM MAM'S"
+      ]
+    },
+    "rationale": "The OCR directly matches the claimed wording at the specified location, and the visual inspection independently agrees.",
+    "evidence": [
+      {
+        "modality": "visual",
+        "content": "Dark curved lettering appears on the left side of the bowl’s blue rim.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "visual",
+        "content": "The lettering appears to read “MADAM MAM'S,” though it is small and curved.",
+        "source": "image_inspector",
+        "relevance": 1.0
+      },
+      {
+        "modality": "ocr",
+        "content": "OCR detected “MADAM MAM'S” on the left side of the blue bowl rim with 0.96 confidence.",
+        "source": "ocr_tool",
+        "relevance": 1.0
+      },
+      {
+        "modality": "ocr",
+        "content": "The target exactly matches the detected text after normalization across multiple OCR views.",
+        "source": "ocr_tool",
+        "relevance": 1.0
+      }
+    ],
+    "tool_trace": [
+      {
+        "tool_name": "tool_router",
+        "tool_input": {
+          "claim": "The bowl rim says \"MADAM MAM'S\"."
+        },
+        "tool_output_summary": "use_image_inspector=True; use_ocr=True; The claim depends on visible text, numbers, signage, labels, dates, or written information. The system should use both the Image Inspector and the OCR tool."
+      },
+      {
+        "tool_name": "image_inspector",
+        "tool_input": {
+          "image_path": "data/images/openimages/583a3460c32053a1.jpg",
+          "claim": "The bowl rim says \"MADAM MAM'S\".",
+          "context": "The claim refers to the dark curved text printed along the left side of the bowl's blue rim."
+        },
+        "tool_output_summary": "A blue-rimmed bowl of noodles is viewed from above. Dark lettering is printed along the bowl’s left rim."
+      },
+      {
+        "tool_name": "ocr_tool",
+        "tool_input": {
+          "image_path": "data/images/openimages/583a3460c32053a1.jpg",
+          "claim": "The bowl rim says \"MADAM MAM'S\".",
+          "text_targets": [
+            "MADAM MAM'S"
+          ]
+        },
+        "tool_output_summary": "Detected 1 text span(s); 1 target match(es); 0 target mismatch(es)."
+      },
+      {
+        "tool_name": "verification_reasoner",
+        "tool_input": {
+          "claim": "The bowl rim says \"MADAM MAM'S\".",
+          "used_ocr": true,
+          "visual_observation_count": 2,
+          "ocr_observation_count": 2
+        },
+        "tool_output_summary": "Label: supported; confidence: 0.98"
+      }
+    ]
+  }
+]

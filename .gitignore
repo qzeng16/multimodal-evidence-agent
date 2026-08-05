@@ -6,3 +6,6 @@ __pycache__/
 outputs/*outputs/cache/
 
 outputs/runs/
+
+# Generated runtime artifacts
+/outputs/
