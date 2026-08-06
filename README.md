@@ -11,6 +11,24 @@
 
 <!-- live-demo:end -->
 
+<!-- demo-screenshot:start -->
+## Demo Preview
+
+<p align="center">
+  <a href="https://qzeng16-multimodal-evidence-agent.hf.space">
+    <img
+      src="docs/demo.png"
+      alt="Multimodal Evidence Verification Agent demo"
+      width="100%"
+    >
+  </a>
+</p>
+
+<p align="center">
+  Click the screenshot to open the live demo.
+</p>
+<!-- demo-screenshot:end -->
+
 
 [![Tests](https://github.com/qzeng16/multimodal-evidence-agent/actions/workflows/tests.yml/badge.svg)](https://github.com/qzeng16/multimodal-evidence-agent/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/Python-3.9-blue)
