@@ -1,5 +1,17 @@
 # Multimodal Evidence Verification Agent
 
+<!-- live-demo:start -->
+## Live Demo
+
+- **Browser demo:** [Open the deployed application](https://qzeng16-multimodal-evidence-agent.hf.space)
+- **API documentation:** [OpenAPI / Swagger UI](https://qzeng16-multimodal-evidence-agent.hf.space/docs)
+- **Hugging Face Space:** [View the Space repository](https://huggingface.co/spaces/qzeng16/multimodal-evidence-agent)
+
+> The public portfolio demo uses six precomputed examples and makes no live model calls. Live verification endpoints are protected by an API key.
+
+<!-- live-demo:end -->
+
+
 [![Tests](https://github.com/qzeng16/multimodal-evidence-agent/actions/workflows/tests.yml/badge.svg)](https://github.com/qzeng16/multimodal-evidence-agent/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/Python-3.9-blue)
 ![FastAPI](https://img.shields.io/badge/API-FastAPI-009688)
